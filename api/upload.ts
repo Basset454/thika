@@ -1,0 +1,203 @@
+import { put } from '@vercel/blob';
+import busboy from 'busboy';
+import { checkAdminAuth } from './admin/auth-utils';
+
+// Disable default Vercel bodyParser so raw stream can be parsed without truncation or corruption
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+function sanitizeBlobToken(rawToken?: string): string | undefined {
+  if (!rawToken || typeof rawToken !== 'string') return undefined;
+  const trimmed = rawToken.trim().replace(/^['"]|['"]$/g, '');
+  if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
+    return undefined;
+  }
+  if (!trimmed.startsWith('vercel_blob_rw_')) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function neutralizeInvalidBlobEnv() {
+  const envToken = process.env.BLOB_READ_WRITE_TOKEN;
+  if (
+    envToken &&
+    (envToken.startsWith('postgres://') ||
+      envToken.startsWith('postgresql://') ||
+      !envToken.startsWith('vercel_blob_rw_'))
+  ) {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+  }
+}
+
+neutralizeInvalidBlobEnv();
+
+function parseNodeMultipart(req: any): Promise<{ buffer: Buffer; filename: string; mimetype: string }> {
+  return new Promise((resolve, reject) => {
+    const bb = busboy({ headers: req.headers });
+    let fileBuffer: Buffer | null = null;
+    let filename = '';
+    let mimetype = 'image/jpeg';
+    let fileFound = false;
+
+    bb.on('file', (_name: string, fileStream: any, info: any) => {
+      fileFound = true;
+      filename = info.filename || `upload-${Date.now()}.jpg`;
+      mimetype = info.mimeType || 'image/jpeg';
+      const chunks: Buffer[] = [];
+
+      fileStream.on('data', (data: Buffer) => chunks.push(data));
+      fileStream.on('end', () => {
+        fileBuffer = Buffer.concat(chunks);
+      });
+    });
+
+    bb.on('finish', () => {
+      if (fileFound && fileBuffer) {
+        resolve({ buffer: fileBuffer, filename, mimetype });
+      } else {
+        reject(new Error('No valid image file found in upload'));
+      }
+    });
+
+    bb.on('error', (err: any) => reject(err));
+    req.pipe(bb);
+  });
+}
+
+function readNodeStream(req: any): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', (err: any) => reject(err));
+  });
+}
+
+export default async function handler(req: any, res: any) {
+  neutralizeInvalidBlobEnv();
+
+  // CORS headers
+  if (res?.setHeader) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-blob-token, x-admin-token');
+  }
+
+  if (req.method === 'OPTIONS') {
+    if (typeof res?.status === 'function') return res.status(200).end();
+    return new Response(null, { status: 200 });
+  }
+
+  if (req.method !== 'POST') {
+    const errPayload = { error: 'Method not allowed. Use POST.' };
+    if (typeof res?.status === 'function') return res.status(405).json(errPayload);
+    return new Response(JSON.stringify(errPayload), { status: 405, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Enforce server-side admin authentication for image upload
+  if (!checkAdminAuth(req)) {
+    const authErr = { error: 'Unauthorized: Admin authentication required for image uploads.' };
+    if (typeof res?.status === 'function') return res.status(401).json(authErr);
+    return new Response(JSON.stringify(authErr), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const explicitToken = (req.headers?.['x-blob-token'] as string) || req?.headers?.get?.('x-blob-token') || process.env.BLOB_READ_WRITE_TOKEN;
+  const token = sanitizeBlobToken(explicitToken);
+
+  // Handle Web Standard Request (Edge or Next/Vercel standard formData)
+  if (typeof req?.formData === 'function') {
+    try {
+      const form = await req.formData();
+      const possibleFile = form.get('file') || form.get('image') || form.get('images');
+      if (!(possibleFile instanceof File)) {
+        return new Response(JSON.stringify({ error: 'No valid file received from form' }), { status: 400 });
+      }
+
+      const cleanFilename = possibleFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const pathname = `products/${Date.now()}-${cleanFilename}`;
+
+      const putOptions = {
+        access: 'public' as const,
+        contentType: possibleFile.type || 'image/jpeg',
+        ...(token ? { token } : {}),
+      };
+
+      const blob = await put(pathname, possibleFile, putOptions);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          url: blob.url,
+          pathname: blob.pathname,
+          contentType: blob.contentType,
+          size: possibleFile.size,
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    } catch (err: any) {
+      return new Response(
+        JSON.stringify({ error: err.message || 'Upload failed' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // Handle Node.js runtime (req: IncomingMessage, res: ServerResponse)
+  try {
+    const rawContentType = (req.headers?.['content-type'] as string) || '';
+    let fileBuffer: Buffer;
+    let filename: string;
+    let contentType: string;
+
+    if (rawContentType.includes('multipart/form-data')) {
+      const parsed = await parseNodeMultipart(req);
+      fileBuffer = parsed.buffer;
+      filename = parsed.filename;
+      contentType = parsed.mimetype;
+    } else {
+      const rawFilename = (req.query?.filename as string) || `furniture-${Date.now()}.jpg`;
+      filename = rawFilename;
+      contentType = rawContentType || 'image/jpeg';
+      fileBuffer = await readNodeStream(req);
+    }
+
+    if (!fileBuffer || fileBuffer.length === 0) {
+      return res.status(400).json({ error: 'Uploaded file is empty or missing.' });
+    }
+
+    const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const pathname = `products/${Date.now()}-${cleanFilename}`;
+
+    const putOptions = {
+      access: 'public' as const,
+      contentType,
+      ...(token ? { token } : {}),
+    };
+
+    const blob = await put(pathname, fileBuffer, putOptions);
+
+    return res.status(200).json({
+      success: true,
+      url: blob.url,
+      pathname: blob.pathname,
+      contentType: blob.contentType,
+      size: fileBuffer.length,
+    });
+  } catch (error: any) {
+    console.error('Vercel Blob upload failed:', error);
+    return res.status(500).json({
+      error: `Vercel Blob upload failed: ${error.message || 'Unknown Blob error'}.`,
+      details: error.toString(),
+    });
+  }
+}
