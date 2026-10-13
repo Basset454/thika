@@ -1,0 +1,1465 @@
+diff --git a/api/db.ts b/api/_db.ts
+similarity index 58%
+rename from api/db.ts
+rename to api/_db.ts
+index dd86e23..1a99152 100644
+--- a/api/db.ts
++++ b/api/_db.ts
+@@ -3,20 +3,25 @@ import { Product, ProductImage } from './products.js';
+ 
+ /**
+  * Resolves the active Neon PostgreSQL connection URL.
+- * Automatically checks DATABASE_URL, POSTGRES_URL, NEON_DATABASE_URL,
++ * Automatically checks DATABASE_URL, POSTGRES_URL, POSTGRES_PRISMA_URL,
++ * POSTGRES_URL_NON_POOLING, NEON_DATABASE_URL,
+  * and recovers any Postgres connection string mistakenly placed in BLOB_READ_WRITE_TOKEN.
+  */
+ export function getDatabaseUrl(): string | undefined {
+-  // Check standard environment variables
+-  const standardCandidate = 
+-    process.env.DATABASE_URL || 
+-    process.env.POSTGRES_URL || 
+-    process.env.NEON_DATABASE_URL;
++  const candidates = [
++    process.env.DATABASE_URL,
++    process.env.POSTGRES_URL,
++    process.env.POSTGRES_PRISMA_URL,
++    process.env.POSTGRES_URL_NON_POOLING,
++    process.env.NEON_DATABASE_URL,
++  ];
+ 
+-  if (standardCandidate && typeof standardCandidate === 'string') {
+-    const trimmed = standardCandidate.trim().replace(/^['"]|['"]$/g, '');
+-    if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
+-      return trimmed;
++  for (const candidate of candidates) {
++    if (candidate && typeof candidate === 'string') {
++      const trimmed = candidate.trim().replace(/^['"]|['"]$/g, '');
++      if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
++        return trimmed;
++      }
+     }
+   }
+ 
+@@ -84,18 +89,14 @@ export function rowToProduct(row: any): Product {
+ let isInitialized = false;
+ 
+ /**
+- * Initializes the Neon PostgreSQL database: creates table if missing and seeds initial items if empty.
++ * Ensures the products table exists in Neon PostgreSQL, seeding initial catalog if empty.
+  */
+-export async function initDatabase(initialProducts: Product[]): Promise<boolean> {
++export async function ensureProductsTable(initialProducts?: Product[]): Promise<boolean> {
+   const dbUrl = getDatabaseUrl();
+-  if (!dbUrl) {
+-    return false;
+-  }
++  if (!dbUrl) return false;
+ 
+   try {
+     const sql = neon(dbUrl);
+-
+-    // 1. Create table if not exists
+     await sql`
+       CREATE TABLE IF NOT EXISTS products (
+         id VARCHAR(100) PRIMARY KEY,
+@@ -112,55 +113,77 @@ export async function initDatabase(initialProducts: Product[]): Promise<boolean>
+       );
+     `;
+ 
+-    // 2. Check if table is empty
+-    const countResult = await sql`SELECT COUNT(*)::int as total FROM products;`;
+-    const count = countResult[0]?.total || 0;
+-
+-    // 3. Seed initial products if empty
+-    if (count === 0 && Array.isArray(initialProducts) && initialProducts.length > 0) {
+-      console.log(`Seeding ${initialProducts.length} initial products into Neon PostgreSQL...`);
+-      for (const p of initialProducts) {
+-        await sql`
+-          INSERT INTO products (
+-            id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+-          ) VALUES (
+-            ${p.id},
+-            ${p.name},
+-            ${p.description},
+-            ${p.price},
+-            ${p.category},
+-            ${p.coverImageUrl || ''},
+-            ${JSON.stringify(p.images || [])}::jsonb,
+-            ${p.isPublished !== false},
+-            ${Boolean(p.isFeatured)},
+-            ${p.createdAt || new Date().toISOString()},
+-            ${p.updatedAt || new Date().toISOString()}
+-          )
+-          ON CONFLICT (id) DO NOTHING;
+-        `;
++    if (initialProducts && initialProducts.length > 0) {
++      const countResult = await sql`SELECT COUNT(*)::int as total FROM products;`;
++      const count = countResult[0]?.total || 0;
++      if (count === 0) {
++        console.log(`Seeding ${initialProducts.length} initial products into Neon PostgreSQL...`);
++        for (const p of initialProducts) {
++          await sql`
++            INSERT INTO products (
++              id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
++            ) VALUES (
++              ${p.id},
++              ${p.name},
++              ${p.description},
++              ${p.price},
++              ${p.category},
++              ${p.coverImageUrl || ''},
++              ${JSON.stringify(p.images || [])}::jsonb,
++              ${p.isPublished !== false},
++              ${Boolean(p.isFeatured)},
++              ${p.createdAt || new Date().toISOString()},
++              ${p.updatedAt || new Date().toISOString()}
++            )
++            ON CONFLICT (id) DO NOTHING;
++          `;
++        }
++        console.log('Initial products successfully seeded into Neon database.');
+       }
+-      console.log('Initial products successfully seeded into Neon database.');
+     }
+ 
+     isInitialized = true;
+     return true;
+   } catch (err: any) {
+-    console.error('Failed to initialize Neon PostgreSQL database:', err?.message || err);
++    console.error('Failed to ensure products table in Neon PostgreSQL:', err?.message || err);
+     return false;
+   }
+ }
+ 
+ /**
+- * Fetches all products from Neon PostgreSQL.
++ * Initializes the Neon PostgreSQL database: creates table if missing and seeds initial items if empty.
++ */
++export async function initDatabase(initialProducts: Product[]): Promise<boolean> {
++  return ensureProductsTable(initialProducts);
++}
++
++/**
++ * Fetches all products from Neon PostgreSQL with auto-table-creation resilience.
+  */
+-export async function getAllProductsFromDb(): Promise<Product[]> {
++export async function getAllProductsFromDb(initialFallbackProducts?: Product[]): Promise<Product[]> {
++  if (!isInitialized && initialFallbackProducts) {
++    await ensureProductsTable(initialFallbackProducts);
++  }
+   const sql = getNeonSql();
+-  const rows = await sql`
+-    SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+-    FROM products
+-    ORDER BY created_at DESC;
+-  `;
+-  return rows.map(rowToProduct);
++  try {
++    const rows = await sql`
++      SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
++      FROM products
++      ORDER BY created_at DESC;
++    `;
++    return rows.map(rowToProduct);
++  } catch (err: any) {
++    if (String(err?.message || err).includes('does not exist') && initialFallbackProducts) {
++      await ensureProductsTable(initialFallbackProducts);
++      const rows = await sql`
++        SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
++        FROM products
++        ORDER BY created_at DESC;
++      `;
++      return rows.map(rowToProduct);
++    }
++    throw err;
++  }
+ }
+ 
+ /**
+@@ -185,30 +208,55 @@ export async function createProductInDb(
+   productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>
+ ): Promise<Product> {
+   const sql = getNeonSql();
+-  const id = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
++  const id = (productData as any).id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+   const now = new Date().toISOString();
+   const coverImageUrl = productData.coverImageUrl || productData.images?.[0]?.url || '';
+ 
+-  const rows = await sql`
+-    INSERT INTO products (
+-      id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+-    ) VALUES (
+-      ${id},
+-      ${productData.name},
+-      ${productData.description || ''},
+-      ${productData.price || 0},
+-      ${productData.category || 'Living Room'},
+-      ${coverImageUrl},
+-      ${JSON.stringify(productData.images || [])}::jsonb,
+-      ${productData.isPublished !== false},
+-      ${Boolean(productData.isFeatured)},
+-      ${now},
+-      ${now}
+-    )
+-    RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
+-  `;
+-
+-  return rowToProduct(rows[0]);
++  try {
++    const rows = await sql`
++      INSERT INTO products (
++        id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
++      ) VALUES (
++        ${id},
++        ${productData.name},
++        ${productData.description || ''},
++        ${productData.price || 0},
++        ${productData.category || 'Living Room'},
++        ${coverImageUrl},
++        ${JSON.stringify(productData.images || [])}::jsonb,
++        ${productData.isPublished !== false},
++        ${Boolean(productData.isFeatured)},
++        ${now},
++        ${now}
++      )
++      RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
++    `;
++    return rowToProduct(rows[0]);
++  } catch (err: any) {
++    if (String(err?.message || err).includes('does not exist')) {
++      await ensureProductsTable();
++      const rows = await sql`
++        INSERT INTO products (
++          id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
++        ) VALUES (
++          ${id},
++          ${productData.name},
++          ${productData.description || ''},
++          ${productData.price || 0},
++          ${productData.category || 'Living Room'},
++          ${coverImageUrl},
++          ${JSON.stringify(productData.images || [])}::jsonb,
++          ${productData.isPublished !== false},
++          ${Boolean(productData.isFeatured)},
++          ${now},
++          ${now}
++        )
++        RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
++      `;
++      return rowToProduct(rows[0]);
++    }
++    throw err;
++  }
+ }
+ 
+ /**
+@@ -266,8 +314,8 @@ export async function deleteProductFromDb(id: string): Promise<boolean> {
+  */
+ export async function resetProductsInDb(initialProducts: Product[]): Promise<Product[]> {
+   const sql = getNeonSql();
++  await ensureProductsTable();
+   await sql`TRUNCATE TABLE products;`;
+-
+   for (const p of initialProducts) {
+     await sql`
+       INSERT INTO products (
+@@ -287,8 +335,7 @@ export async function resetProductsInDb(initialProducts: Product[]): Promise<Pro
+       );
+     `;
+   }
+-
+-  return getAllProductsFromDb();
++  return getAllProductsFromDb(initialProducts);
+ }
+ 
+ /**
+@@ -313,6 +360,21 @@ export async function checkNeonHealth(): Promise<{
+ 
+   try {
+     const sql = neon(dbUrl);
++    await sql`
++      CREATE TABLE IF NOT EXISTS products (
++        id VARCHAR(100) PRIMARY KEY,
++        name VARCHAR(255) NOT NULL,
++        description TEXT,
++        price NUMERIC(12, 2) NOT NULL DEFAULT 0,
++        category VARCHAR(100) NOT NULL DEFAULT 'Living Room',
++        cover_image_url TEXT,
++        images JSONB NOT NULL DEFAULT '[]'::jsonb,
++        is_published BOOLEAN NOT NULL DEFAULT true,
++        is_featured BOOLEAN NOT NULL DEFAULT false,
++        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
++      );
++    `;
+     const result = await sql`SELECT COUNT(*)::int as total FROM products;`;
+     const count = result[0]?.total || 0;
+     return {
+diff --git a/api/admin/_auth-utils.ts b/api/admin/_auth-utils.ts
+index cccb754..2b2a115 100644
+--- a/api/admin/_auth-utils.ts
++++ b/api/admin/_auth-utils.ts
+@@ -1,58 +1,105 @@
++import fs from 'fs';
++import path from 'path';
+ import crypto from 'crypto';
+ 
+ /**
+  * Server-side Admin Authentication Utilities for Trust Furniture (أثاث الثقة).
+  * 
+- * Security properties:
+- * 1. Fails closed: If ADMIN_PASSWORD is unset or empty, all login attempts are rejected.
+- * 2. Constant-time password comparison to prevent timing attacks.
+- * 3. HMAC-SHA256 signed stateless tokens with expiration timestamps,
++ * Security & Reliability properties:
++ * 1. Default admin passwords provided out-of-the-box so deployments never fail with "not configured".
++ * 2. Reads from process.env.ADMIN_PASSWORD, .admin_password file, and known default secrets.
++ * 3. Constant-time password comparison to prevent timing attacks.
++ * 4. HMAC-SHA256 signed stateless tokens with expiration timestamps,
+  *    enabling verified sessions across serverless instances without shared database state.
+- * 4. Never exposes or logs secrets.
+  */
+ 
+ const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+ const TOKEN_PREFIX = 'trust_sess_';
+ 
++export const ACCEPTED_DEFAULT_PASSWORDS = [
++  "Trust2026@Admin",
++  "H(8pHUg3.K{'Nfl2A2#ePz.d%BJ-QG",
++];
++
++function readPasswordFromFile(): string | null {
++  try {
++    const candidates = [
++      path.resolve(process.cwd(), '.admin_password'),
++      path.resolve(process.cwd(), '..', '.admin_password'),
++      path.resolve('/var/task', '.admin_password'),
++    ];
++    for (const p of candidates) {
++      if (fs.existsSync(p)) {
++        const content = fs.readFileSync(p, 'utf8').trim();
++        if (content.length > 0) return content;
++      }
++    }
++  } catch {
++    // ignore
++  }
++  return null;
++}
++
+ export function isAuthConfigured(): boolean {
+-  const secret = process.env.ADMIN_PASSWORD;
+-  return Boolean(secret && secret.trim().length > 0);
++  return true; // Always configured, never return 503
+ }
+ 
+-function getAuthSecret(): string | null {
+-  const secret = process.env.ADMIN_PASSWORD;
+-  if (!secret || !secret.trim()) return null;
+-  return secret.trim();
++export function getAuthSecret(): string {
++  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim().length > 0) {
++    return process.env.ADMIN_PASSWORD.trim();
++  }
++  const fromFile = readPasswordFromFile();
++  if (fromFile) return fromFile;
++  return ACCEPTED_DEFAULT_PASSWORDS[0];
+ }
+ 
+ /**
+- * Constant-time password verification using SHA-256 digests.
++ * Constant-time password verification supporting env var, file, and default passwords.
+  */
+ export function verifyAdminPassword(inputPassword: string): boolean {
+-  const configuredPassword = getAuthSecret();
+-  if (!configuredPassword || !inputPassword) return false;
++  if (!inputPassword || typeof inputPassword !== 'string') return false;
++  const cleanInput = inputPassword.trim();
++  if (!cleanInput) return false;
++
++  const validPasswords = new Set<string>();
++
++  // 1. Configured via env var
++  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()) {
++    validPasswords.add(process.env.ADMIN_PASSWORD.trim());
++  }
++  // 2. From .admin_password file
++  const filePass = readPasswordFromFile();
++  if (filePass) {
++    validPasswords.add(filePass);
++  }
++  // 3. Fallback accepted passwords
++  for (const p of ACCEPTED_DEFAULT_PASSWORDS) {
++    validPasswords.add(p);
++  }
+ 
+-  const expectedHash = crypto.createHash('sha256').update(configuredPassword).digest();
+-  const inputHash = crypto.createHash('sha256').update(inputPassword).digest();
++  const inputHash = crypto.createHash('sha256').update(cleanInput).digest();
++
++  for (const pwd of validPasswords) {
++    const expectedHash = crypto.createHash('sha256').update(pwd).digest();
++    if (crypto.timingSafeEqual(expectedHash, inputHash)) {
++      return true;
++    }
++  }
+ 
+-  return crypto.timingSafeEqual(expectedHash, inputHash);
++  return false;
+ }
+ 
+ /**
+  * Generates an HMAC-SHA256 signed session token.
+  */
+-export function createSessionToken(): string | null {
++export function createSessionToken(): string {
+   const secret = getAuthSecret();
+-  if (!secret) return null;
+-
+   const payload = {
+     exp: Date.now() + SESSION_TTL_MS,
+     nonce: crypto.randomBytes(16).toString('hex'),
+   };
+-
+   const payloadString = JSON.stringify(payload);
+   const payloadBase64 = Buffer.from(payloadString).toString('base64url');
+-
+   const signature = crypto
+     .createHmac('sha256', secret)
+     .update(payloadBase64)
+@@ -68,9 +115,6 @@ export function verifySessionToken(token: string | null | undefined): boolean {
+   if (!token || typeof token !== 'string') return false;
+   if (!token.startsWith(TOKEN_PREFIX)) return false;
+ 
+-  const secret = getAuthSecret();
+-  if (!secret) return false;
+-
+   const raw = token.slice(TOKEN_PREFIX.length);
+   const parts = raw.split('.');
+   if (parts.length !== 2) return false;
+@@ -78,19 +122,32 @@ export function verifySessionToken(token: string | null | undefined): boolean {
+   const [payloadBase64, signature] = parts;
+   if (!payloadBase64 || !signature) return false;
+ 
+-  // Verify HMAC signature in constant time
+-  const expectedSignature = crypto
+-    .createHmac('sha256', secret)
+-    .update(payloadBase64)
+-    .digest('base64url');
++  const candidateSecrets = new Set<string>();
++  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()) {
++    candidateSecrets.add(process.env.ADMIN_PASSWORD.trim());
++  }
++  const filePass = readPasswordFromFile();
++  if (filePass) candidateSecrets.add(filePass);
++  for (const p of ACCEPTED_DEFAULT_PASSWORDS) {
++    candidateSecrets.add(p);
++  }
+ 
+-  if (signature.length !== expectedSignature.length) return false;
+-  const sigMatch = crypto.timingSafeEqual(
+-    Buffer.from(signature),
+-    Buffer.from(expectedSignature)
+-  );
++  let matched = false;
++  for (const sec of candidateSecrets) {
++    const expectedSignature = crypto
++      .createHmac('sha256', sec)
++      .update(payloadBase64)
++      .digest('base64url');
++
++    if (signature.length === expectedSignature.length) {
++      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
++        matched = true;
++        break;
++      }
++    }
++  }
+ 
+-  if (!sigMatch) return false;
++  if (!matched) return false;
+ 
+   // Verify expiration
+   try {
+@@ -142,5 +199,10 @@ export function checkAdminAuth(req: any): boolean {
+ 
+ export function setCustomAdminPassword(newPassword: string): boolean {
+   process.env.ADMIN_PASSWORD = newPassword;
++  try {
++    fs.writeFileSync(path.resolve(process.cwd(), '.admin_password'), newPassword.trim(), 'utf8');
++  } catch {
++    // ignore
++  }
+   return true;
+ }
+diff --git a/api/db-status.ts b/api/db-status.ts
+index 24b4b6b..f0c3cbf 100644
+--- a/api/db-status.ts
++++ b/api/db-status.ts
+@@ -1,4 +1,4 @@
+-import { checkNeonHealth, isNeonConfigured, getDatabaseUrl } from './db.js';
++import { checkNeonHealth, isNeonConfigured, getDatabaseUrl } from './_db.js';
+ 
+ export default async function handler(req: any, res: any) {
+   if (res?.setHeader) {
+diff --git a/api/products.ts b/api/products.ts
+index 7122900..1e8e378 100644
+--- a/api/products.ts
++++ b/api/products.ts
+@@ -1,7 +1,16 @@
+ import fs from 'fs';
+ import path from 'path';
+-import { put, list } from '@vercel/blob';
+ import { checkAdminAuth } from './admin/_auth-utils.js';
++import { 
++  isNeonConfigured, 
++  getAllProductsFromDb, 
++  getProductByIdFromDb, 
++  createProductInDb, 
++  updateProductInDb, 
++  deleteProductFromDb, 
++  resetProductsInDb,
++  initDatabase 
++} from './_db.js';
+ 
+ export interface ProductImage {
+   id: string;
+@@ -80,7 +89,7 @@ export const INITIAL_PRODUCTS: Product[] = [
+   {
+     id: 'prod-f3',
+     name: 'Bouclé Cloud Modular Sofa',
+-    description: 'Deep-seat modular 3-piece sectional sofa covered in ivory bouclé fabric. High-density foam core with feather blend topper for ultimate comfort.',
++    description: 'Deep-seat modular lounge sofa covered in tactile cream bouclé fabric. High-resilience core with down-blend top cushioning for cloud-like comfort.',
+     price: 1650,
+     category: 'Living Room',
+     isPublished: true,
+@@ -90,13 +99,13 @@ export const INITIAL_PRODUCTS: Product[] = [
+       {
+         id: 'img-f3-1',
+         url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1000&auto=format&fit=crop&q=80',
+-        name: 'boucle_sofa.jpg',
++        name: 'cloud_boucle_sofa.jpg',
+         isCover: true,
+-        uploadedAt: new Date(Date.now() - 86400000).toISOString(),
++        uploadedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
+       }
+     ],
+     createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
++    updatedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
+   },
+   {
+     id: 'prod-f4',
+@@ -113,189 +122,73 @@ export const INITIAL_PRODUCTS: Product[] = [
+         url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=1000&auto=format&fit=crop&q=80',
+         name: 'architect_desk.jpg',
+         isCover: true,
+-        uploadedAt: new Date(Date.now() - 86400000).toISOString(),
++        uploadedAt: new Date(Date.now() - 86400000 * 6).toISOString(),
+       }
+     ],
+-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
++    createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
++    updatedAt: new Date(Date.now() - 86400000 * 6).toISOString(),
+   }
+ ];
+ 
+-const DATA_DIR = path.resolve(process.cwd(), 'data');
+-const LOCAL_PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+-const BLOB_DATABASE_PATH = '_database/products.json';
+-
+-// In-memory cache for ultra-fast response
+-let memoryProductsCache: Product[] | null = null;
+-let lastBlobFetchTime = 0;
+-const CACHE_TTL_MS = 10000; // 10 seconds cache to avoid excessive requests
+-
+-/**
+- * Neutralizes any PostgreSQL connection strings accidentally entered into BLOB_READ_WRITE_TOKEN.
+- * Returns only genuine Vercel Blob tokens starting with 'vercel_blob_rw_'.
+- */
+-export function getValidBlobToken(explicitToken?: string): string | undefined {
+-  const tokenCandidate = explicitToken || process.env.BLOB_READ_WRITE_TOKEN;
+-  if (!tokenCandidate || typeof tokenCandidate !== 'string') return undefined;
+-
+-  const trimmed = tokenCandidate.trim().replace(/^['"]|['"]$/g, '');
+-
+-  // If accidentally entered postgres URI, neutralize it
+-  if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
+-    if (process.env.BLOB_READ_WRITE_TOKEN === tokenCandidate) {
+-      delete process.env.BLOB_READ_WRITE_TOKEN;
+-    }
+-    return undefined;
+-  }
+-
+-  if (!trimmed.startsWith('vercel_blob_rw_')) {
+-    return undefined;
+-  }
+-
+-  return trimmed;
+-}
+-
+-// Neutralize on load
+-if (
+-  process.env.BLOB_READ_WRITE_TOKEN &&
+-  (process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgres://') ||
+-    process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgresql://') ||
+-    !process.env.BLOB_READ_WRITE_TOKEN.startsWith('vercel_blob_rw_'))
+-) {
+-  delete process.env.BLOB_READ_WRITE_TOKEN;
+-}
+-
+ function loadLocalDiskProducts(): Product[] {
+   try {
+-    if (fs.existsSync(LOCAL_PRODUCTS_FILE)) {
+-      const data = fs.readFileSync(LOCAL_PRODUCTS_FILE, 'utf-8');
+-      const parsed = JSON.parse(data);
+-      if (Array.isArray(parsed) && parsed.length > 0) {
+-        return parsed;
++    const candidates = [
++      path.resolve(process.cwd(), 'data', 'products.json'),
++      path.resolve(process.cwd(), '..', 'data', 'products.json'),
++      path.resolve('/var/task', 'data', 'products.json'),
++    ];
++    for (const filePath of candidates) {
++      if (fs.existsSync(filePath)) {
++        const raw = fs.readFileSync(filePath, 'utf8');
++        const parsed = JSON.parse(raw);
++        if (Array.isArray(parsed) && parsed.length > 0) {
++          return parsed;
++        }
+       }
+     }
+-  } catch {
+-    // ignore
++  } catch (err) {
++    console.warn('Could not read products from local disk:', err);
+   }
+   return INITIAL_PRODUCTS;
+ }
+ 
+ function saveLocalDiskProducts(products: Product[]) {
+   try {
+-    if (!fs.existsSync(DATA_DIR)) {
+-      fs.mkdirSync(DATA_DIR, { recursive: true });
++    const dataDir = path.resolve(process.cwd(), 'data');
++    if (!fs.existsSync(dataDir)) {
++      fs.mkdirSync(dataDir, { recursive: true });
+     }
+-    fs.writeFileSync(LOCAL_PRODUCTS_FILE, JSON.stringify(products, null, 2), 'utf-8');
++    fs.writeFileSync(path.join(dataDir, 'products.json'), JSON.stringify(products, null, 2), 'utf8');
+   } catch {
+-    // ignore
+-  }
+-}
+-
+-/**
+- * Loads products from Vercel Blob store _database/products.json.
+- * Falls back safely to disk/memory so the API NEVER crashes.
+- */
+-async function loadProducts(token?: string): Promise<{ products: Product[]; source: string }> {
+-  const now = Date.now();
+-  if (memoryProductsCache && now - lastBlobFetchTime < CACHE_TTL_MS) {
+-    return { products: memoryProductsCache, source: 'cache' };
++    // ignore in serverless read-only contexts
+   }
+-
+-  // 1. Try fetching from Vercel Blob _database/products.json
+-  try {
+-    const listOptions: Record<string, any> = {
+-      prefix: BLOB_DATABASE_PATH,
+-      limit: 10,
+-    };
+-    if (token) listOptions.token = token;
+-
+-    const listResult = await list(listOptions);
+-    const dbBlob = listResult.blobs.find((b) => b.pathname === BLOB_DATABASE_PATH);
+-
+-    if (dbBlob && dbBlob.url) {
+-      const res = await fetch(`${dbBlob.url}?t=${now}`, { cache: 'no-store' });
+-      if (res.ok) {
+-        const data = await res.json();
+-        if (Array.isArray(data) && data.length > 0) {
+-          memoryProductsCache = data;
+-          lastBlobFetchTime = now;
+-          saveLocalDiskProducts(data);
+-          return { products: data, source: 'vercel_blob' };
+-        }
+-      }
+-    }
+-  } catch (err: any) {
+-    console.warn('Could not read from Vercel Blob store:', err?.message || err);
+-  }
+-
+-  // 2. Fall back to local disk
+-  const local = loadLocalDiskProducts();
+-  memoryProductsCache = local;
+-  lastBlobFetchTime = now;
+-
+-  // 3. If Blob is reachable and _database/products.json does not exist yet, seed it
+-  if (token || process.env.VERCEL_OIDC_TOKEN) {
+-    saveProductsToBlob(local, token).catch(() => {});
+-  }
+-
+-  return { products: local, source: 'local_disk' };
+ }
+ 
+-/**
+- * Saves products to Vercel Blob store _database/products.json and local disk.
+- */
+-async function saveProducts(
+-  products: Product[],
+-  token?: string
+-): Promise<{ success: boolean; url?: string; source: string }> {
+-  // Always update memory and disk immediately
+-  memoryProductsCache = products;
+-  lastBlobFetchTime = Date.now();
+-  saveLocalDiskProducts(products);
+-
+-  // Persist to Vercel Blob _database/products.json
+-  try {
+-    const putOptions = {
+-      access: 'public' as const,
+-      addRandomSuffix: false,
+-      contentType: 'application/json',
+-      ...(token ? { token } : {}),
+-    };
+-
+-    const blob = await put(BLOB_DATABASE_PATH, JSON.stringify(products, null, 2), putOptions);
+-    return { success: true, url: blob.url, source: 'vercel_blob' };
+-  } catch (err: any) {
+-    console.warn('Vercel Blob persistence notice:', err?.message || err);
+-    return { success: true, source: 'local_store' };
+-  }
+-}
+-
+-async function saveProductsToBlob(products: Product[], token?: string): Promise<string | null> {
+-  try {
+-    const putOptions = {
+-      access: 'public' as const,
+-      addRandomSuffix: false,
+-      contentType: 'application/json',
+-      ...(token ? { token } : {}),
+-    };
+-    const blob = await put(BLOB_DATABASE_PATH, JSON.stringify(products, null, 2), putOptions);
+-    return blob.url;
+-  } catch {
+-    return null;
+-  }
+-}
+-
+-function normalizeProduct(raw: any): Product {
+-  const images = Array.isArray(raw?.images) ? raw.images : [];
+-  const coverObj = images.find((i: any) => i.isCover) || images[0];
+-  const coverImageUrl = raw?.coverImageUrl || coverObj?.url || '';
++export function normalizeProduct(raw: any): Product {
++  const images: ProductImage[] = Array.isArray(raw?.images)
++    ? raw.images.map((img: any, idx: number) => ({
++        id: String(img?.id || `img-${Date.now()}-${idx}`),
++        url: String(img?.url || ''),
++        pathname: img?.pathname ? String(img.pathname) : undefined,
++        isCover: Boolean(img?.isCover),
++        name: img?.name ? String(img.name) : undefined,
++        size: typeof img?.size === 'number' ? img.size : undefined,
++        uploadedAt: String(img?.uploadedAt || new Date().toISOString()),
++      }))
++    : [];
++
++  const coverImageUrl =
++    raw?.coverImageUrl ||
++    images.find((img) => img.isCover)?.url ||
++    images[0]?.url ||
++    'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=1000&auto=format&fit=crop&q=80';
+ 
+   return {
+-    id: raw?.id || `prod-f${Date.now()}`,
+-    name: String(raw?.name || '').trim(),
++    id: String(raw?.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
++    name: String(raw?.name || 'Untitled Furniture Item'),
+     price: Number(raw?.price) || 0,
+-    description: String(raw?.description || '').trim(),
+-    category: String(raw?.category || 'Living Room').trim(),
++    description: String(raw?.description || ''),
++    category: String(raw?.category || 'Living Room'),
+     images,
+     coverImageUrl,
+     isPublished: raw?.isPublished !== undefined ? Boolean(raw.isPublished) : true,
+@@ -310,11 +203,10 @@ export default async function handler(req: any, res: any) {
+   if (res?.setHeader) {
+     res.setHeader('Access-Control-Allow-Origin', '*');
+     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-blob-token');
++    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-blob-token, x-admin-token');
+   }
+ 
+   const method = (req?.method || 'GET').toUpperCase();
+-
+   if (method === 'OPTIONS') {
+     if (typeof res?.status === 'function') return res.status(200).end();
+     return new Response(null, { status: 200 });
+@@ -322,8 +214,8 @@ export default async function handler(req: any, res: any) {
+ 
+   // Safe query extraction
+   let urlParams: URLSearchParams | null = null;
++  const rawUrl = req?.url || '';
+   try {
+-    const rawUrl = req?.url || '';
+     const parsedUrl = new URL(rawUrl, `http://${req?.headers?.host || 'localhost'}`);
+     urlParams = parsedUrl.searchParams;
+   } catch {
+@@ -341,32 +233,53 @@ export default async function handler(req: any, res: any) {
+     return undefined;
+   };
+ 
+-  const explicitToken = req?.headers?.['x-blob-token'] || req?.headers?.get?.('x-blob-token');
+-  const token = getValidBlobToken(explicitToken);
+-
+   try {
+     // -------------------------------------------------------------
+     // GET /api/products
+     // -------------------------------------------------------------
+     if (method === 'GET') {
++      const productId = getQueryParam('id');
+       const wantsAll =
+         getQueryParam('all') === 'true' ||
+         getQueryParam('admin') === 'true';
+-
+       const isAdmin = wantsAll ? checkAdminAuth(req) : false;
+       const includeUnpublished = wantsAll && isAdmin;
+ 
+-      const { products, source } = await loadProducts(token);
+-      const filtered = includeUnpublished
+-        ? products
+-        : products.filter((p) => p.isPublished !== false);
++      // 1. Primary Source: Neon PostgreSQL
++      if (isNeonConfigured()) {
++        try {
++          if (productId) {
++            const product = await getProductByIdFromDb(productId);
++            if (!product) {
++              const notFound = { error: 'Product not found' };
++              if (typeof res?.status === 'function') return res.status(404).json(notFound);
++              return new Response(JSON.stringify(notFound), { status: 404, headers: { 'Content-Type': 'application/json' } });
++            }
++            const payload = { product, source: 'neon_postgresql' };
++            if (typeof res?.status === 'function') return res.status(200).json(payload);
++            return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
++          }
++
++          const dbProducts = await getAllProductsFromDb(INITIAL_PRODUCTS);
++          const filtered = includeUnpublished
++            ? dbProducts
++            : dbProducts.filter((p) => p.isPublished !== false);
++          const payload = { products: filtered, source: 'neon_postgresql' };
++          if (typeof res?.status === 'function') return res.status(200).json(payload);
++          return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
++        } catch (dbErr: any) {
++          console.warn('Neon database query failed, attempting fallback:', dbErr?.message || dbErr);
++        }
++      }
+ 
+-      const payload = { products: filtered, source };
++      // 2. Fallback to local storage if Neon unavailable
++      const local = loadLocalDiskProducts();
++      const filtered = includeUnpublished
++        ? local
++        : local.filter((p) => p.isPublished !== false);
++      const payload = { products: filtered, source: 'local_disk' };
+       if (typeof res?.status === 'function') return res.status(200).json(payload);
+-      return new Response(JSON.stringify(payload), {
+-        status: 200,
+-        headers: { 'Content-Type': 'application/json' },
+-      });
++      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+     }
+ 
+     // Require admin authentication for all mutations (POST, PUT, DELETE)
+@@ -398,34 +311,79 @@ export default async function handler(req: any, res: any) {
+     }
+ 
+     // -------------------------------------------------------------
+-    // POST /api/products
++    // POST /api/products (Create OR Reset)
+     // -------------------------------------------------------------
+     if (method === 'POST') {
++      const isResetAction = 
++        body?.action === 'reset' || 
++        getQueryParam('action') === 'reset' || 
++        rawUrl.endsWith('/reset') || 
++        rawUrl.includes('/products/reset');
++
++      if (isResetAction) {
++        if (isNeonConfigured()) {
++          try {
++            const resetList = await resetProductsInDb(INITIAL_PRODUCTS);
++            saveLocalDiskProducts(resetList);
++            const okPayload = {
++              success: true,
++              products: resetList,
++              source: 'neon_postgresql',
++              message: 'Database reset to initial furniture catalog in Neon PostgreSQL.',
++            };
++            if (typeof res?.status === 'function') return res.status(200).json(okPayload);
++            return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
++          } catch (err: any) {
++            console.error('Failed to reset products in Neon:', err);
++          }
++        }
++        saveLocalDiskProducts(INITIAL_PRODUCTS);
++        const okPayload = { success: true, products: INITIAL_PRODUCTS, source: 'local_disk' };
++        if (typeof res?.status === 'function') return res.status(200).json(okPayload);
++        return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
++      }
++
+       if (!body || !body.name) {
+         const errPayload = { error: 'Product name is required' };
+         if (typeof res?.status === 'function') return res.status(400).json(errPayload);
+-        return new Response(JSON.stringify(errPayload), {
+-          status: 400,
+-          headers: { 'Content-Type': 'application/json' },
+-        });
++        return new Response(JSON.stringify(errPayload), { status: 400, headers: { 'Content-Type': 'application/json' } });
+       }
+ 
+       const productToInsert = normalizeProduct(body);
+-      const { products } = await loadProducts(token);
+-      const updatedList = [productToInsert, ...products];
+ 
+-      const saveResult = await saveProducts(updatedList, token);
+-      const okPayload = {
+-        success: true,
+-        product: productToInsert,
+-        source: saveResult.source,
+-      };
++      // Primary: Save in Neon PostgreSQL
++      if (isNeonConfigured()) {
++        try {
++          const created = await createProductInDb(productToInsert);
++          // Mirror to disk cache
++          try {
++            const current = loadLocalDiskProducts();
++            saveLocalDiskProducts([created, ...current]);
++          } catch {
++            // ignore
++          }
++          const okPayload = {
++            success: true,
++            product: created,
++            source: 'neon_postgresql',
++          };
++          if (typeof res?.status === 'function') return res.status(201).json(okPayload);
++          return new Response(JSON.stringify(okPayload), { status: 201, headers: { 'Content-Type': 'application/json' } });
++        } catch (dbErr: any) {
++          console.error('Failed to insert product into Neon PostgreSQL:', dbErr);
++          const errPayload = { error: `Failed to insert product into Neon: ${dbErr?.message || dbErr}` };
++          if (typeof res?.status === 'function') return res.status(500).json(errPayload);
++          return new Response(JSON.stringify(errPayload), { status: 500, headers: { 'Content-Type': 'application/json' } });
++        }
++      }
+ 
++      // Fallback: Local disk
++      const current = loadLocalDiskProducts();
++      const updatedList = [productToInsert, ...current];
++      saveLocalDiskProducts(updatedList);
++      const okPayload = { success: true, product: productToInsert, source: 'local_disk' };
+       if (typeof res?.status === 'function') return res.status(201).json(okPayload);
+-      return new Response(JSON.stringify(okPayload), {
+-        status: 201,
+-        headers: { 'Content-Type': 'application/json' },
+-      });
++      return new Response(JSON.stringify(okPayload), { status: 201, headers: { 'Content-Type': 'application/json' } });
+     }
+ 
+     // -------------------------------------------------------------
+@@ -436,39 +394,51 @@ export default async function handler(req: any, res: any) {
+       if (!productId) {
+         const errPayload = { error: 'Product ID is required for update' };
+         if (typeof res?.status === 'function') return res.status(400).json(errPayload);
+-        return new Response(JSON.stringify(errPayload), {
+-          status: 400,
+-          headers: { 'Content-Type': 'application/json' },
+-        });
++        return new Response(JSON.stringify(errPayload), { status: 400, headers: { 'Content-Type': 'application/json' } });
++      }
++
++      // Primary: Update in Neon PostgreSQL
++      if (isNeonConfigured()) {
++        try {
++          const updated = await updateProductInDb(productId, body);
++          if (!updated) {
++            const notFound = { error: 'Product not found in Neon database' };
++            if (typeof res?.status === 'function') return res.status(404).json(notFound);
++            return new Response(JSON.stringify(notFound), { status: 404, headers: { 'Content-Type': 'application/json' } });
++          }
++          const okPayload = {
++            success: true,
++            product: updated,
++            source: 'neon_postgresql',
++          };
++          if (typeof res?.status === 'function') return res.status(200).json(okPayload);
++          return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
++        } catch (dbErr: any) {
++          console.error('Failed to update product in Neon PostgreSQL:', dbErr);
++          const errPayload = { error: `Failed to update product in Neon: ${dbErr?.message || dbErr}` };
++          if (typeof res?.status === 'function') return res.status(500).json(errPayload);
++          return new Response(JSON.stringify(errPayload), { status: 500, headers: { 'Content-Type': 'application/json' } });
++        }
+       }
+ 
+-      const { products } = await loadProducts(token);
++      // Fallback: Local disk
++      const current = loadLocalDiskProducts();
+       let updatedProduct: Product | null = null;
+-      const updatedList = products.map((p) => {
++      const updatedList = current.map((p) => {
+         if (p.id === productId) {
+           updatedProduct = normalizeProduct({ ...p, ...body, id: productId });
+           return updatedProduct;
+         }
+         return p;
+       });
+-
+       if (!updatedProduct) {
+         updatedProduct = normalizeProduct({ ...body, id: productId });
+         updatedList.unshift(updatedProduct);
+       }
+-
+-      const saveResult = await saveProducts(updatedList, token);
+-      const okPayload = {
+-        success: true,
+-        product: updatedProduct,
+-        source: saveResult.source,
+-      };
+-
++      saveLocalDiskProducts(updatedList);
++      const okPayload = { success: true, product: updatedProduct, source: 'local_disk' };
+       if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+-      return new Response(JSON.stringify(okPayload), {
+-        status: 200,
+-        headers: { 'Content-Type': 'application/json' },
+-      });
++      return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+     }
+ 
+     // -------------------------------------------------------------
+@@ -479,49 +449,55 @@ export default async function handler(req: any, res: any) {
+       if (!productId) {
+         const errPayload = { error: 'Product ID is required for deletion' };
+         if (typeof res?.status === 'function') return res.status(400).json(errPayload);
+-        return new Response(JSON.stringify(errPayload), {
+-          status: 400,
+-          headers: { 'Content-Type': 'application/json' },
+-        });
++        return new Response(JSON.stringify(errPayload), { status: 400, headers: { 'Content-Type': 'application/json' } });
+       }
+ 
+-      const { products } = await loadProducts(token);
+-      const updatedList = products.filter((p) => p.id !== productId);
++      // Primary: Delete in Neon PostgreSQL
++      if (isNeonConfigured()) {
++        try {
++          await deleteProductFromDb(productId);
++          const okPayload = {
++            success: true,
++            message: 'Product deleted successfully from Neon database',
++            id: productId,
++            source: 'neon_postgresql',
++          };
++          if (typeof res?.status === 'function') return res.status(200).json(okPayload);
++          return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
++        } catch (dbErr: any) {
++          console.error('Failed to delete product in Neon PostgreSQL:', dbErr);
++          const errPayload = { error: `Failed to delete product in Neon: ${dbErr?.message || dbErr}` };
++          if (typeof res?.status === 'function') return res.status(500).json(errPayload);
++          return new Response(JSON.stringify(errPayload), { status: 500, headers: { 'Content-Type': 'application/json' } });
++        }
++      }
+ 
+-      const saveResult = await saveProducts(updatedList, token);
++      // Fallback: Local disk
++      const current = loadLocalDiskProducts();
++      const updatedList = current.filter((p) => p.id !== productId);
++      saveLocalDiskProducts(updatedList);
+       const okPayload = {
+         success: true,
+         message: 'Product deleted successfully',
+         id: productId,
+-        source: saveResult.source,
++        source: 'local_disk',
+       };
+-
+       if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+-      return new Response(JSON.stringify(okPayload), {
+-        status: 200,
+-        headers: { 'Content-Type': 'application/json' },
+-      });
++      return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+     }
+ 
+     const unsuppPayload = { error: 'Method not allowed' };
+     if (typeof res?.status === 'function') return res.status(405).json(unsuppPayload);
+-    return new Response(JSON.stringify(unsuppPayload), {
+-      status: 405,
+-      headers: { 'Content-Type': 'application/json' },
+-    });
++    return new Response(JSON.stringify(unsuppPayload), { status: 405, headers: { 'Content-Type': 'application/json' } });
+   } catch (error: any) {
+-    console.error('Products API error:', error?.message || error);
+-    // Even in case of an unexpected error, return fallback products with HTTP 200 instead of HTTP 500!
++    console.error('Products API unhandled error:', error?.message || error);
+     const fallbackProducts = loadLocalDiskProducts();
+     const fallbackPayload = {
+       products: fallbackProducts,
+       source: 'fallback_store',
+-      notice: 'Served from resilient storage.',
++      error: error?.message || String(error),
+     };
+     if (typeof res?.status === 'function') return res.status(200).json(fallbackPayload);
+-    return new Response(JSON.stringify(fallbackPayload), {
+-      status: 200,
+-      headers: { 'Content-Type': 'application/json' },
+-    });
++    return new Response(JSON.stringify(fallbackPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+   }
+ }
+diff --git a/auth-fix.patch b/auth-fix.patch
+new file mode 100644
+index 0000000..36b380b
+--- /dev/null
++++ b/auth-fix.patch
+@@ -0,0 +1,216 @@
++From 150c2166c47fe056f5d1b9fa62f7ae0d3611109c Mon Sep 17 00:00:00 2001
++From: Basset454 <abdelbassetsamah84@gmail.com>
++Date: Tue, 13 Oct 2026 20:58:39 +0000
++Subject: [PATCH] fix(auth): support both Trust2026@Admin and generated
++ password without requiring env var; rename db.ts to _db.ts
++
++---
++ api/{db.ts => _db.ts}    |   0
++ api/admin/_auth-utils.ts | 122 +++++++++++++++++++++++++--------------
++ api/db-status.ts         |   2 +-
++ 3 files changed, 79 insertions(+), 45 deletions(-)
++ rename api/{db.ts => _db.ts} (100%)
++
++diff --git a/api/db.ts b/api/_db.ts
++similarity index 100%
++rename from api/db.ts
++rename to api/_db.ts
++diff --git a/api/admin/_auth-utils.ts b/api/admin/_auth-utils.ts
++index d18a4f0..2b2a115 100644
++--- a/api/admin/_auth-utils.ts
+++++ b/api/admin/_auth-utils.ts
++@@ -1,11 +1,13 @@
+++import fs from 'fs';
+++import path from 'path';
++ import crypto from 'crypto';
++ 
++ /**
++  * Server-side Admin Authentication Utilities for Trust Furniture (أثاث الثقة).
++  * 
++- * Security properties:
++- * 1. Default strong admin password available out-of-the-box so deployments never fail with "not configured".
++- * 2. Overridable via ADMIN_PASSWORD environment variable in Vercel / local .env.
+++ * Security & Reliability properties:
+++ * 1. Default admin passwords provided out-of-the-box so deployments never fail with "not configured".
+++ * 2. Reads from process.env.ADMIN_PASSWORD, .admin_password file, and known default secrets.
++  * 3. Constant-time password comparison to prevent timing attacks.
++  * 4. HMAC-SHA256 signed stateless tokens with expiration timestamps,
++  *    enabling verified sessions across serverless instances without shared database state.
++@@ -14,41 +16,72 @@ import crypto from 'crypto';
++ const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
++ const TOKEN_PREFIX = 'trust_sess_';
++ 
++-export const DEFAULT_ADMIN_PASSWORD = "H(8pHUg3.K{'Nfl2A2#ePz.d%BJ-QG";
+++export const ACCEPTED_DEFAULT_PASSWORDS = [
+++  "Trust2026@Admin",
+++  "H(8pHUg3.K{'Nfl2A2#ePz.d%BJ-QG",
+++];
+++
+++function readPasswordFromFile(): string | null {
+++  try {
+++    const candidates = [
+++      path.resolve(process.cwd(), '.admin_password'),
+++      path.resolve(process.cwd(), '..', '.admin_password'),
+++      path.resolve('/var/task', '.admin_password'),
+++    ];
+++    for (const p of candidates) {
+++      if (fs.existsSync(p)) {
+++        const content = fs.readFileSync(p, 'utf8').trim();
+++        if (content.length > 0) return content;
+++      }
+++    }
+++  } catch {
+++    // ignore
+++  }
+++  return null;
+++}
++ 
++ export function isAuthConfigured(): boolean {
++-  return true;
+++  return true; // Always configured, never return 503
++ }
++ 
++ export function getAuthSecret(): string {
++-  const secret = process.env.ADMIN_PASSWORD;
++-  if (secret && secret.trim().length > 0) {
++-    return secret.trim();
+++  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim().length > 0) {
+++    return process.env.ADMIN_PASSWORD.trim();
++   }
++-  return DEFAULT_ADMIN_PASSWORD;
+++  const fromFile = readPasswordFromFile();
+++  if (fromFile) return fromFile;
+++  return ACCEPTED_DEFAULT_PASSWORDS[0];
++ }
++ 
++ /**
++- * Constant-time password verification using SHA-256 digests.
+++ * Constant-time password verification supporting env var, file, and default passwords.
++  */
++ export function verifyAdminPassword(inputPassword: string): boolean {
++   if (!inputPassword || typeof inputPassword !== 'string') return false;
++-  const configuredPassword = getAuthSecret();
++   const cleanInput = inputPassword.trim();
++-  const cleanConfig = configuredPassword.trim();
+++  if (!cleanInput) return false;
++ 
++-  const expectedHash = crypto.createHash('sha256').update(cleanConfig).digest();
++-  const inputHash = crypto.createHash('sha256').update(cleanInput).digest();
+++  const validPasswords = new Set<string>();
++ 
++-  // Primary check against configured password
++-  if (crypto.timingSafeEqual(expectedHash, inputHash)) {
++-    return true;
+++  // 1. Configured via env var
+++  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()) {
+++    validPasswords.add(process.env.ADMIN_PASSWORD.trim());
+++  }
+++  // 2. From .admin_password file
+++  const filePass = readPasswordFromFile();
+++  if (filePass) {
+++    validPasswords.add(filePass);
+++  }
+++  // 3. Fallback accepted passwords
+++  for (const p of ACCEPTED_DEFAULT_PASSWORDS) {
+++    validPasswords.add(p);
++   }
++ 
++-  // Also accept DEFAULT_ADMIN_PASSWORD as secondary fallback if a custom one is set
++-  if (cleanConfig !== DEFAULT_ADMIN_PASSWORD) {
++-    const defaultHash = crypto.createHash('sha256').update(DEFAULT_ADMIN_PASSWORD).digest();
++-    if (crypto.timingSafeEqual(defaultHash, inputHash)) {
+++  const inputHash = crypto.createHash('sha256').update(cleanInput).digest();
+++
+++  for (const pwd of validPasswords) {
+++    const expectedHash = crypto.createHash('sha256').update(pwd).digest();
+++    if (crypto.timingSafeEqual(expectedHash, inputHash)) {
++       return true;
++     }
++   }
++@@ -82,7 +115,6 @@ export function verifySessionToken(token: string | null | undefined): boolean {
++   if (!token || typeof token !== 'string') return false;
++   if (!token.startsWith(TOKEN_PREFIX)) return false;
++ 
++-  const secret = getAuthSecret();
++   const raw = token.slice(TOKEN_PREFIX.length);
++   const parts = raw.split('.');
++   if (parts.length !== 2) return false;
++@@ -90,35 +122,32 @@ export function verifySessionToken(token: string | null | undefined): boolean {
++   const [payloadBase64, signature] = parts;
++   if (!payloadBase64 || !signature) return false;
++ 
++-  // Verify HMAC signature in constant time
++-  const expectedSignature = crypto
++-    .createHmac('sha256', secret)
++-    .update(payloadBase64)
++-    .digest('base64url');
++-
++-  let sigMatch = false;
++-  if (signature.length === expectedSignature.length) {
++-    sigMatch = crypto.timingSafeEqual(
++-      Buffer.from(signature),
++-      Buffer.from(expectedSignature)
++-    );
+++  const candidateSecrets = new Set<string>();
+++  if (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()) {
+++    candidateSecrets.add(process.env.ADMIN_PASSWORD.trim());
+++  }
+++  const filePass = readPasswordFromFile();
+++  if (filePass) candidateSecrets.add(filePass);
+++  for (const p of ACCEPTED_DEFAULT_PASSWORDS) {
+++    candidateSecrets.add(p);
++   }
++ 
++-  // If secret was changed and signature failed, also try DEFAULT_ADMIN_PASSWORD
++-  if (!sigMatch && secret !== DEFAULT_ADMIN_PASSWORD) {
++-    const defaultExpectedSignature = crypto
++-      .createHmac('sha256', DEFAULT_ADMIN_PASSWORD)
+++  let matched = false;
+++  for (const sec of candidateSecrets) {
+++    const expectedSignature = crypto
+++      .createHmac('sha256', sec)
++       .update(payloadBase64)
++       .digest('base64url');
++-    if (signature.length === defaultExpectedSignature.length) {
++-      sigMatch = crypto.timingSafeEqual(
++-        Buffer.from(signature),
++-        Buffer.from(defaultExpectedSignature)
++-      );
+++
+++    if (signature.length === expectedSignature.length) {
+++      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+++        matched = true;
+++        break;
+++      }
++     }
++   }
++ 
++-  if (!sigMatch) return false;
+++  if (!matched) return false;
++ 
++   // Verify expiration
++   try {
++@@ -170,5 +199,10 @@ export function checkAdminAuth(req: any): boolean {
++ 
++ export function setCustomAdminPassword(newPassword: string): boolean {
++   process.env.ADMIN_PASSWORD = newPassword;
+++  try {
+++    fs.writeFileSync(path.resolve(process.cwd(), '.admin_password'), newPassword.trim(), 'utf8');
+++  } catch {
+++    // ignore
+++  }
++   return true;
++ }
++diff --git a/api/db-status.ts b/api/db-status.ts
++index 24b4b6b..f0c3cbf 100644
++--- a/api/db-status.ts
+++++ b/api/db-status.ts
++@@ -1,4 +1,4 @@
++-import { checkNeonHealth, isNeonConfigured, getDatabaseUrl } from './db.js';
+++import { checkNeonHealth, isNeonConfigured, getDatabaseUrl } from './_db.js';
++ 
++ export default async function handler(req: any, res: any) {
++   if (res?.setHeader) {
++-- 
++2.34.1
++
+diff --git a/bun.lock b/bun.lock
+index b309530..e4610d2 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -6,6 +6,7 @@
+       "name": "react-example",
+       "dependencies": {
+         "@google/genai": "^2.4.0",
++        "@neondatabase/serverless": "^1.2.0",
+         "@tailwindcss/vite": "^4.3.3",
+         "@vercel/blob": "^2.8.1",
+         "@vitejs/plugin-react": "^6.1.1",
+@@ -98,6 +99,8 @@
+ 
+     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+ 
++    "@neondatabase/serverless": ["@neondatabase/serverless@1.2.0", "", {}, "sha512-tnaqgixUengZQNd9ZrS3ytQfamJzLKY8QxgqWQTNHHtB+KrFQWk77JTbbpg4RD+J3qE4eO2lVytvGDX5Kj6FdQ=="],
++
+     "@oxc-project/types": ["@oxc-project/types@0.153.0", "", {}, "sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw=="],
+ 
+     "@protobufjs/aspromise": ["@protobufjs/aspromise@1.1.2", "", {}, "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ=="],
+diff --git a/package-lock.json b/package-lock.json
+index 0dc2160..24ca9d0 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -9,6 +9,7 @@
+       "version": "0.0.0",
+       "dependencies": {
+         "@google/genai": "^2.4.0",
++        "@neondatabase/serverless": "^1.2.0",
+         "@tailwindcss/vite": "^4.3.3",
+         "@vercel/blob": "^2.8.1",
+         "@vitejs/plugin-react": "^6.1.1",
+@@ -534,6 +535,15 @@
+         "@jridgewell/sourcemap-codec": "^1.4.14"
+       }
+     },
++    "node_modules/@neondatabase/serverless": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/@neondatabase/serverless/-/serverless-1.2.0.tgz",
++      "integrity": "sha512-tnaqgixUengZQNd9ZrS3ytQfamJzLKY8QxgqWQTNHHtB+KrFQWk77JTbbpg4RD+J3qE4eO2lVytvGDX5Kj6FdQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=19.0.0"
++      }
++    },
+     "node_modules/@oxc-project/types": {
+       "version": "0.153.0",
+       "license": "MIT",
+diff --git a/package.json b/package.json
+index a951b64..8a917a6 100644
+--- a/package.json
++++ b/package.json
+@@ -13,6 +13,7 @@
+   },
+   "dependencies": {
+     "@google/genai": "^2.4.0",
++    "@neondatabase/serverless": "^1.2.0",
+     "@tailwindcss/vite": "^4.3.3",
+     "@vercel/blob": "^2.8.1",
+     "@vitejs/plugin-react": "^6.1.1",
+diff --git a/server.ts b/server.ts
+index 89e9ff6..7b7378d 100644
+--- a/server.ts
++++ b/server.ts
+@@ -11,6 +11,8 @@ import blobStatusHandler from './api/blob/status.js';
+ import loginHandler from './api/admin/login';
+ import verifyHandler from './api/admin/verify';
+ import logoutHandler from './api/admin/logout';
++import dbStatusHandler from './api/db-status.js';
++import changePasswordHandler from './api/admin/change-password.js';
+ 
+ dotenv.config();
+ 
+@@ -59,6 +61,14 @@ app.all('/api/admin/logout', (req: Request, res: Response) => {
+   return logoutHandler(req, res);
+ });
+ 
++app.all('/api/admin/change-password', (req: Request, res: Response) => {
++  return changePasswordHandler(req, res);
++});
++
++app.all('/api/db-status', (req: Request, res: Response) => {
++  return dbStatusHandler(req, res);
++});
++
+ // -------------------------------------------------------------
+ // 2. API: Vercel Blob Status
+ // -------------------------------------------------------------
+@@ -69,11 +79,11 @@ app.all(['/api/blob/status', '/api/blob-status'], (req: Request, res: Response)
+ // -------------------------------------------------------------
+ // 3. API: Products APIs (Authoritative: Vercel Blob _database/products.json)
+ // -------------------------------------------------------------
+-app.all('/api/products', (req: Request, res: Response) => {
++app.all(['/api/products', '/api/products/reset'], (req: Request, res: Response) => {
+   return productsHandler(req, res);
+ });
+ app.all('/api/products/:id', (req: Request, res: Response) => {
+-  req.query.id = req.params.id;
++  if (req.params.id !== 'reset') req.query.id = req.params.id;
+   return productsHandler(req, res);
+ });
+ 
+diff --git a/vercel.json b/vercel.json
+index 5839737..890acf7 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -7,6 +7,10 @@
+       "source": "/api/blob-status",
+       "destination": "/api/blob/status"
+     },
++    {
++      "source": "/api/products/reset",
++      "destination": "/api/products?action=reset"
++    },
+     {
+       "source": "/api/(.*)",
+       "destination": "/api/$1"

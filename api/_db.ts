@@ -3,20 +3,25 @@ import { Product, ProductImage } from './products.js';
 
 /**
  * Resolves the active Neon PostgreSQL connection URL.
- * Automatically checks DATABASE_URL, POSTGRES_URL, NEON_DATABASE_URL,
+ * Automatically checks DATABASE_URL, POSTGRES_URL, POSTGRES_PRISMA_URL,
+ * POSTGRES_URL_NON_POOLING, NEON_DATABASE_URL,
  * and recovers any Postgres connection string mistakenly placed in BLOB_READ_WRITE_TOKEN.
  */
 export function getDatabaseUrl(): string | undefined {
-  // Check standard environment variables
-  const standardCandidate = 
-    process.env.DATABASE_URL || 
-    process.env.POSTGRES_URL || 
-    process.env.NEON_DATABASE_URL;
+  const candidates = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.POSTGRES_URL_NON_POOLING,
+    process.env.NEON_DATABASE_URL,
+  ];
 
-  if (standardCandidate && typeof standardCandidate === 'string') {
-    const trimmed = standardCandidate.trim().replace(/^['"]|['"]$/g, '');
-    if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
-      return trimmed;
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'string') {
+      const trimmed = candidate.trim().replace(/^['"]|['"]$/g, '');
+      if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
+        return trimmed;
+      }
     }
   }
 
@@ -84,18 +89,14 @@ export function rowToProduct(row: any): Product {
 let isInitialized = false;
 
 /**
- * Initializes the Neon PostgreSQL database: creates table if missing and seeds initial items if empty.
+ * Ensures the products table exists in Neon PostgreSQL, seeding initial catalog if empty.
  */
-export async function initDatabase(initialProducts: Product[]): Promise<boolean> {
+export async function ensureProductsTable(initialProducts?: Product[]): Promise<boolean> {
   const dbUrl = getDatabaseUrl();
-  if (!dbUrl) {
-    return false;
-  }
+  if (!dbUrl) return false;
 
   try {
     const sql = neon(dbUrl);
-
-    // 1. Create table if not exists
     await sql`
       CREATE TABLE IF NOT EXISTS products (
         id VARCHAR(100) PRIMARY KEY,
@@ -112,55 +113,77 @@ export async function initDatabase(initialProducts: Product[]): Promise<boolean>
       );
     `;
 
-    // 2. Check if table is empty
-    const countResult = await sql`SELECT COUNT(*)::int as total FROM products;`;
-    const count = countResult[0]?.total || 0;
-
-    // 3. Seed initial products if empty
-    if (count === 0 && Array.isArray(initialProducts) && initialProducts.length > 0) {
-      console.log(`Seeding ${initialProducts.length} initial products into Neon PostgreSQL...`);
-      for (const p of initialProducts) {
-        await sql`
-          INSERT INTO products (
-            id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
-          ) VALUES (
-            ${p.id},
-            ${p.name},
-            ${p.description},
-            ${p.price},
-            ${p.category},
-            ${p.coverImageUrl || ''},
-            ${JSON.stringify(p.images || [])}::jsonb,
-            ${p.isPublished !== false},
-            ${Boolean(p.isFeatured)},
-            ${p.createdAt || new Date().toISOString()},
-            ${p.updatedAt || new Date().toISOString()}
-          )
-          ON CONFLICT (id) DO NOTHING;
-        `;
+    if (initialProducts && initialProducts.length > 0) {
+      const countResult = await sql`SELECT COUNT(*)::int as total FROM products;`;
+      const count = countResult[0]?.total || 0;
+      if (count === 0) {
+        console.log(`Seeding ${initialProducts.length} initial products into Neon PostgreSQL...`);
+        for (const p of initialProducts) {
+          await sql`
+            INSERT INTO products (
+              id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+            ) VALUES (
+              ${p.id},
+              ${p.name},
+              ${p.description},
+              ${p.price},
+              ${p.category},
+              ${p.coverImageUrl || ''},
+              ${JSON.stringify(p.images || [])}::jsonb,
+              ${p.isPublished !== false},
+              ${Boolean(p.isFeatured)},
+              ${p.createdAt || new Date().toISOString()},
+              ${p.updatedAt || new Date().toISOString()}
+            )
+            ON CONFLICT (id) DO NOTHING;
+          `;
+        }
+        console.log('Initial products successfully seeded into Neon database.');
       }
-      console.log('Initial products successfully seeded into Neon database.');
     }
 
     isInitialized = true;
     return true;
   } catch (err: any) {
-    console.error('Failed to initialize Neon PostgreSQL database:', err?.message || err);
+    console.error('Failed to ensure products table in Neon PostgreSQL:', err?.message || err);
     return false;
   }
 }
 
 /**
- * Fetches all products from Neon PostgreSQL.
+ * Initializes the Neon PostgreSQL database: creates table if missing and seeds initial items if empty.
  */
-export async function getAllProductsFromDb(): Promise<Product[]> {
+export async function initDatabase(initialProducts: Product[]): Promise<boolean> {
+  return ensureProductsTable(initialProducts);
+}
+
+/**
+ * Fetches all products from Neon PostgreSQL with auto-table-creation resilience.
+ */
+export async function getAllProductsFromDb(initialFallbackProducts?: Product[]): Promise<Product[]> {
+  if (!isInitialized && initialFallbackProducts) {
+    await ensureProductsTable(initialFallbackProducts);
+  }
   const sql = getNeonSql();
-  const rows = await sql`
-    SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
-    FROM products
-    ORDER BY created_at DESC;
-  `;
-  return rows.map(rowToProduct);
+  try {
+    const rows = await sql`
+      SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+      FROM products
+      ORDER BY created_at DESC;
+    `;
+    return rows.map(rowToProduct);
+  } catch (err: any) {
+    if (String(err?.message || err).includes('does not exist') && initialFallbackProducts) {
+      await ensureProductsTable(initialFallbackProducts);
+      const rows = await sql`
+        SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+        FROM products
+        ORDER BY created_at DESC;
+      `;
+      return rows.map(rowToProduct);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -189,26 +212,51 @@ export async function createProductInDb(
   const now = new Date().toISOString();
   const coverImageUrl = productData.coverImageUrl || productData.images?.[0]?.url || '';
 
-  const rows = await sql`
-    INSERT INTO products (
-      id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
-    ) VALUES (
-      ${id},
-      ${productData.name},
-      ${productData.description || ''},
-      ${productData.price || 0},
-      ${productData.category || 'Living Room'},
-      ${coverImageUrl},
-      ${JSON.stringify(productData.images || [])}::jsonb,
-      ${productData.isPublished !== false},
-      ${Boolean(productData.isFeatured)},
-      ${now},
-      ${now}
-    )
-    RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
-  `;
-
-  return rowToProduct(rows[0]);
+  try {
+    const rows = await sql`
+      INSERT INTO products (
+        id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+      ) VALUES (
+        ${id},
+        ${productData.name},
+        ${productData.description || ''},
+        ${productData.price || 0},
+        ${productData.category || 'Living Room'},
+        ${coverImageUrl},
+        ${JSON.stringify(productData.images || [])}::jsonb,
+        ${productData.isPublished !== false},
+        ${Boolean(productData.isFeatured)},
+        ${now},
+        ${now}
+      )
+      RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
+    `;
+    return rowToProduct(rows[0]);
+  } catch (err: any) {
+    if (String(err?.message || err).includes('does not exist')) {
+      await ensureProductsTable();
+      const rows = await sql`
+        INSERT INTO products (
+          id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+        ) VALUES (
+          ${id},
+          ${productData.name},
+          ${productData.description || ''},
+          ${productData.price || 0},
+          ${productData.category || 'Living Room'},
+          ${coverImageUrl},
+          ${JSON.stringify(productData.images || [])}::jsonb,
+          ${productData.isPublished !== false},
+          ${Boolean(productData.isFeatured)},
+          ${now},
+          ${now}
+        )
+        RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
+      `;
+      return rowToProduct(rows[0]);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -266,8 +314,8 @@ export async function deleteProductFromDb(id: string): Promise<boolean> {
  */
 export async function resetProductsInDb(initialProducts: Product[]): Promise<Product[]> {
   const sql = getNeonSql();
+  await ensureProductsTable();
   await sql`TRUNCATE TABLE products;`;
-
   for (const p of initialProducts) {
     await sql`
       INSERT INTO products (
@@ -287,8 +335,7 @@ export async function resetProductsInDb(initialProducts: Product[]): Promise<Pro
       );
     `;
   }
-
-  return getAllProductsFromDb();
+  return getAllProductsFromDb(initialProducts);
 }
 
 /**
@@ -313,6 +360,21 @@ export async function checkNeonHealth(): Promise<{
 
   try {
     const sql = neon(dbUrl);
+    await sql`
+      CREATE TABLE IF NOT EXISTS products (
+        id VARCHAR(100) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        category VARCHAR(100) NOT NULL DEFAULT 'Living Room',
+        cover_image_url TEXT,
+        images JSONB NOT NULL DEFAULT '[]'::jsonb,
+        is_published BOOLEAN NOT NULL DEFAULT true,
+        is_featured BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `;
     const result = await sql`SELECT COUNT(*)::int as total FROM products;`;
     const count = result[0]?.total || 0;
     return {

@@ -260,7 +260,7 @@ export default async function handler(req: any, res: any) {
             return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
           }
 
-          const dbProducts = await getAllProductsFromDb();
+          const dbProducts = await getAllProductsFromDb(INITIAL_PRODUCTS);
           const filtered = includeUnpublished
             ? dbProducts
             : dbProducts.filter((p) => p.isPublished !== false);
