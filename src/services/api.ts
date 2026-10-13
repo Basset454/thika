@@ -1,4 +1,4 @@
-import { Product, ProductImage, BlobStatus } from '../types';
+import { Product, ProductImage, BlobStatus, DatabaseStatus } from '../types';
 import { upload } from '@vercel/blob/client';
 
 let inMemoryAdminToken: string | null = null;
@@ -64,6 +64,27 @@ export async function checkAdminStatus(): Promise<boolean> {
 
 export function isAdminAuthenticated(): boolean {
   return Boolean(inMemoryAdminToken);
+}
+
+export async function changeAdminPassword(newPassword: string, currentPassword?: string): Promise<void> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (inMemoryAdminToken) {
+    headers['Authorization'] = `Bearer ${inMemoryAdminToken}`;
+  }
+
+  const res = await fetch('/api/admin/change-password', {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'فشل تحديث كلمة المرور.');
+  }
 }
 
 export function getCustomBlobToken(): string {
@@ -363,3 +384,24 @@ export async function getBlobStatus(): Promise<BlobStatus> {
       : 'Checking Vercel Blob store test23-blob connection...',
   };
 }
+
+export async function getDatabaseStatus(): Promise<DatabaseStatus> {
+  try {
+    const res = await fetch('/api/db-status');
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn('Could not check database status:', err);
+  }
+
+  return {
+    isConfigured: false,
+    connected: false,
+    provider: 'Neon (PostgreSQL)',
+    count: 0,
+    message: 'جاري فحص الاتصال بقاعدة بيانات Neon...',
+  };
+}
+

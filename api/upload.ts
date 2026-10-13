@@ -1,6 +1,6 @@
 import { put } from '@vercel/blob';
 import busboy from 'busboy';
-import { checkAdminAuth } from './admin/auth-utils';
+import { checkAdminAuth } from './admin/auth-utils.js';
 
 // Disable default Vercel bodyParser so raw stream can be parsed without truncation or corruption
 export const config = {

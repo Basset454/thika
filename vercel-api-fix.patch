@@ -1,0 +1,91 @@
+From 5b2ef53c6df807f2fad3328424ed1ee22fd830a7 Mon Sep 17 00:00:00 2001
+From: Basset454 <abdelbassetsamah84@gmail.com>
+Date: Tue, 13 Oct 2026 20:20:30 +0000
+Subject: [PATCH] fix(api): resolve serverless import errors by adding .js extensions for Vercel Node ESM runtime
+
+---
+ api/admin/login.ts  | 2 +-
+ api/admin/verify.ts | 2 +-
+ api/blob-upload.ts  | 2 +-
+ api/blob/status.ts  | 2 +-
+ api/delete-image.ts | 2 +-
+ api/products.ts     | 2 +-
+ api/upload.ts       | 2 +-
+ 7 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/api/admin/login.ts b/api/admin/login.ts
+index 2dbba67..84024af 100644
+--- a/api/admin/login.ts
++++ b/api/admin/login.ts
+@@ -1,4 +1,4 @@
+-import { isAuthConfigured, verifyAdminPassword, createSessionToken } from './auth-utils';
++import { isAuthConfigured, verifyAdminPassword, createSessionToken } from './auth-utils.js';
+ 
+ export default async function handler(req: any, res: any) {
+   if (res?.setHeader) {
+diff --git a/api/admin/verify.ts b/api/admin/verify.ts
+index 81ebd8c..d8b2d4a 100644
+--- a/api/admin/verify.ts
++++ b/api/admin/verify.ts
+@@ -1,4 +1,4 @@
+-import { checkAdminAuth } from './auth-utils';
++import { checkAdminAuth } from './auth-utils.js';
+ 
+ export default async function handler(req: any, res: any) {
+   if (res?.setHeader) {
+diff --git a/api/blob-upload.ts b/api/blob-upload.ts
+index 64561a8..9507f88 100644
+--- a/api/blob-upload.ts
++++ b/api/blob-upload.ts
+@@ -1,5 +1,5 @@
+ import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+-import { checkAdminAuth } from './admin/auth-utils';
++import { checkAdminAuth } from './admin/auth-utils.js';
+ 
+ function sanitizeBlobToken(rawToken?: string): string | undefined {
+   if (!rawToken || typeof rawToken !== 'string') return undefined;
+diff --git a/api/blob/status.ts b/api/blob/status.ts
+index f2d15f5..e8af4ae 100644
+--- a/api/blob/status.ts
++++ b/api/blob/status.ts
+@@ -1 +1 @@
+-export { default } from '../blob-status';
++export { default } from '../blob-status.js';
+diff --git a/api/delete-image.ts b/api/delete-image.ts
+index 9b26fb5..cf24f51 100644
+--- a/api/delete-image.ts
++++ b/api/delete-image.ts
+@@ -1,5 +1,5 @@
+ import { del } from '@vercel/blob';
+-import { checkAdminAuth } from './admin/auth-utils';
++import { checkAdminAuth } from './admin/auth-utils.js';
+ 
+ function sanitizeBlobToken(rawToken?: string): string | undefined {
+   if (!rawToken || typeof rawToken !== 'string') return undefined;
+diff --git a/api/products.ts b/api/products.ts
+index d1ac735..96ac722 100644
+--- a/api/products.ts
++++ b/api/products.ts
+@@ -1,7 +1,7 @@
+ import fs from 'fs';
+ import path from 'path';
+ import { put, list } from '@vercel/blob';
+-import { checkAdminAuth } from './admin/auth-utils';
++import { checkAdminAuth } from './admin/auth-utils.js';
+ 
+ export interface ProductImage {
+   id: string;
+diff --git a/api/upload.ts b/api/upload.ts
+index 56f72f9..835b3da 100644
+--- a/api/upload.ts
++++ b/api/upload.ts
+@@ -1,6 +1,6 @@
+ import { put } from '@vercel/blob';
+ import busboy from 'busboy';
+-import { checkAdminAuth } from './admin/auth-utils';
++import { checkAdminAuth } from './admin/auth-utils.js';
+ 
+ // Disable default Vercel bodyParser so raw stream can be parsed without truncation or corruption
+ export const config = {
+-- 
+2.34.1

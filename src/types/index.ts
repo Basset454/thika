@@ -29,3 +29,14 @@ export interface BlobStatus {
   message: string;
   storeName?: string;
 }
+
+export interface DatabaseStatus {
+  isConfigured: boolean;
+  connected: boolean;
+  provider: string;
+  count: number;
+  message: string;
+  maskedUrl?: string;
+  error?: string;
+}
+

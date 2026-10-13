@@ -1,1 +1,1 @@
-export { default } from '../blob-status';
+export { default } from '../blob-status.js';

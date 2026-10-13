@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Product, BlobStatus } from './types';
+import { Product, BlobStatus, DatabaseStatus } from './types';
 import { 
   getProducts, 
   createProduct, 
   updateProduct, 
   deleteProduct, 
   getBlobStatus, 
+  getDatabaseStatus,
   resetProductsToInitial,
   checkAdminStatus,
   adminLogout
@@ -14,7 +15,7 @@ import { CustomerNavbar } from './components/CustomerNavbar';
 import { CustomerStore } from './components/CustomerStore';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminPanel } from './components/AdminPanel';
-import { CheckCircle2, AlertCircle, Armchair, MapPin, PhoneCall, ShieldCheck, Truck } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Armchair, MapPin, PhoneCall, ShieldCheck, Truck, Lock } from 'lucide-react';
 import { STORE_BRANCHES } from './data/initialProducts';
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
   const [storeCategory, setStoreCategory] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [blobStatus, setBlobStatus] = useState<BlobStatus | null>(null);
+  const [dbStatus, setDbStatus] = useState<DatabaseStatus | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -70,6 +72,8 @@ export default function App() {
   const navigateAdmin = (path: string) => {
     window.history.pushState({}, '', path);
     setAdminSubpath(path);
+    setIsAdminRoute(true);
+    syncRoute();
   };
 
   // Fetch products from server database
@@ -92,10 +96,19 @@ export default function App() {
     }
   };
 
+  const refreshDbStatus = async () => {
+    try {
+      const status = await getDatabaseStatus();
+      setDbStatus(status);
+    } catch (e) {
+      console.warn('Could not refresh db status:', e);
+    }
+  };
+
   useEffect(() => {
     async function init() {
       setLoading(true);
-      await Promise.all([refreshProducts(isAdminRoute), refreshBlobStatus()]);
+      await Promise.all([refreshProducts(isAdminRoute), refreshBlobStatus(), refreshDbStatus()]);
       setLoading(false);
     }
     init();
@@ -183,6 +196,8 @@ export default function App() {
                 onLogout={handleAdminLogout}
                 blobStatus={blobStatus}
                 onRefreshBlobStatus={refreshBlobStatus}
+                dbStatus={dbStatus}
+                onRefreshDbStatus={refreshDbStatus}
               />
             )}
           </div>
@@ -306,6 +321,16 @@ export default function App() {
                 <span>غرف نوم</span>
                 <span>·</span>
                 <span>مكاتب</span>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={() => navigateAdmin('/admin/products')}
+                  className="inline-flex items-center gap-1.5 text-neutral-400 hover:text-[#FF551A] transition-colors cursor-pointer font-medium"
+                  title="الدخول إلى لوحة تحكم المشرف (/admin)"
+                >
+                  <Lock className="w-3 h-3 text-[#FF551A]" />
+                  <span>لوحة الإدارة</span>
+                </button>
               </div>
             </div>
 

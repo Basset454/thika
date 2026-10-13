@@ -1,5 +1,5 @@
 import { del } from '@vercel/blob';
-import { checkAdminAuth } from './admin/auth-utils';
+import { checkAdminAuth } from './admin/auth-utils.js';
 
 function sanitizeBlobToken(rawToken?: string): string | undefined {
   if (!rawToken || typeof rawToken !== 'string') return undefined;

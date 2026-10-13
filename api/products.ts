@@ -1,7 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 import { put, list } from '@vercel/blob';
-import { checkAdminAuth } from './admin/auth-utils';
+import { checkAdminAuth } from './admin/auth-utils.js';
+import {
+  isNeonConfigured,
+  initDatabase,
+  getAllProductsFromDb,
+  createProductInDb,
+  updateProductInDb,
+  deleteProductFromDb,
+  resetProductsInDb,
+} from './db.js';
 
 export interface ProductImage {
   id: string;
@@ -31,8 +40,8 @@ export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-f1',
     name: 'Nordic Oak Lounge Chair',
-    description: 'Handcrafted solid oak armchair upholstered with premium textured linen. Features ergonomic curved backrest and tapered wooden legs.',
-    price: 480,
+    description: 'كرسي مريح مصنوع يدوياً من خشب البلوط الطبيعي ومكسو بكتان فاخر عالي الجودة. يتميز بمسند ظهر منحني مريح وأرجل خشبية كلاسيكية متينة.',
+    price: 48000,
     category: 'Living Room',
     isPublished: true,
     isFeatured: true,
@@ -59,8 +68,8 @@ export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-f2',
     name: 'Minimalist Walnut Dining Table',
-    description: 'Six-seater contemporary dining table crafted from sustainable American walnut with matte protective finish. Elegant bevelled edges and solid joinery.',
-    price: 920,
+    description: 'طاولة طعام معاصرة لستة أشخاص مصنوعة من خشب الجوز الأمريكي المستدام مع طبقة حماية غير لامعة وزوايا مشطوفة بعناية.',
+    price: 92000,
     category: 'Dining Room',
     isPublished: true,
     isFeatured: false,
@@ -80,8 +89,8 @@ export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-f3',
     name: 'Bouclé Cloud Modular Sofa',
-    description: 'Deep-seat modular 3-piece sectional sofa covered in ivory bouclé fabric. High-density foam core with feather blend topper for ultimate comfort.',
-    price: 1650,
+    description: 'كنبة عصرية عميقة مؤلفة من 3 قطع معيارية من قماش البوكليه العاجي الفاخر. حشوة مريحة من الإسفنج عالي الكثافة وطبقة ريش لراحة مطلقة.',
+    price: 165000,
     category: 'Living Room',
     isPublished: true,
     isFeatured: true,
@@ -101,8 +110,8 @@ export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-f4',
     name: 'Architect Ergonomic Desk',
-    description: 'Sleek workspace desk made of solid ash wood with integrated wire management channel, subtle brass accents, and dual soft-close drawers.',
-    price: 680,
+    description: 'مكتب عمل عصري مصنع من خشب الدردار الصلب مع قناة مدمجة لتنظيم الأسلاك، ولمسات نحاسية خفيفة، ودرجين بنظام إغلاق هادئ.',
+    price: 68000,
     category: 'Office',
     isPublished: true,
     isFeatured: false,
@@ -128,10 +137,21 @@ const BLOB_DATABASE_PATH = '_database/products.json';
 // In-memory cache for ultra-fast response
 let memoryProductsCache: Product[] | null = null;
 let lastBlobFetchTime = 0;
-const CACHE_TTL_MS = 10000; // 10 seconds cache to avoid excessive requests
+const CACHE_TTL_MS = 10000;
+
+let dbInitialized = false;
+
+async function ensureDbReady() {
+  if (dbInitialized || !isNeonConfigured()) return;
+  try {
+    const ok = await initDatabase(INITIAL_PRODUCTS);
+    if (ok) dbInitialized = true;
+  } catch (err: any) {
+    console.warn('Neon database auto-init check:', err?.message || err);
+  }
+}
 
 /**
- * Neutralizes any PostgreSQL connection strings accidentally entered into BLOB_READ_WRITE_TOKEN.
  * Returns only genuine Vercel Blob tokens starting with 'vercel_blob_rw_'.
  */
 export function getValidBlobToken(explicitToken?: string): string | undefined {
@@ -140,8 +160,10 @@ export function getValidBlobToken(explicitToken?: string): string | undefined {
 
   const trimmed = tokenCandidate.trim().replace(/^['"]|['"]$/g, '');
 
-  // If accidentally entered postgres URI, neutralize it
   if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL = trimmed;
+    }
     if (process.env.BLOB_READ_WRITE_TOKEN === tokenCandidate) {
       delete process.env.BLOB_READ_WRITE_TOKEN;
     }
@@ -153,16 +175,6 @@ export function getValidBlobToken(explicitToken?: string): string | undefined {
   }
 
   return trimmed;
-}
-
-// Neutralize on load
-if (
-  process.env.BLOB_READ_WRITE_TOKEN &&
-  (process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgres://') ||
-    process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgresql://') ||
-    !process.env.BLOB_READ_WRITE_TOKEN.startsWith('vercel_blob_rw_'))
-) {
-  delete process.env.BLOB_READ_WRITE_TOKEN;
 }
 
 function loadLocalDiskProducts(): Product[] {
@@ -192,16 +204,32 @@ function saveLocalDiskProducts(products: Product[]) {
 }
 
 /**
- * Loads products from Vercel Blob store _database/products.json.
- * Falls back safely to disk/memory so the API NEVER crashes.
+ * Loads products from Neon PostgreSQL first, or falls back to Vercel Blob / local disk.
  */
 async function loadProducts(token?: string): Promise<{ products: Product[]; source: string }> {
+  // 1. Neon Database (Authoritative Database)
+  if (isNeonConfigured()) {
+    try {
+      await ensureDbReady();
+      const dbProducts = await getAllProductsFromDb();
+      if (Array.isArray(dbProducts) && dbProducts.length > 0) {
+        memoryProductsCache = dbProducts;
+        lastBlobFetchTime = Date.now();
+        saveLocalDiskProducts(dbProducts);
+        return { products: dbProducts, source: 'neon_postgres' };
+      }
+    } catch (err: any) {
+      console.warn('Failed to query Neon database, falling back to cached/blob storage:', err?.message || err);
+    }
+  }
+
+  // 2. In-memory cache
   const now = Date.now();
   if (memoryProductsCache && now - lastBlobFetchTime < CACHE_TTL_MS) {
     return { products: memoryProductsCache, source: 'cache' };
   }
 
-  // 1. Try fetching from Vercel Blob _database/products.json
+  // 3. Fallback: Vercel Blob store
   try {
     const listOptions: Record<string, any> = {
       prefix: BLOB_DATABASE_PATH,
@@ -228,32 +256,25 @@ async function loadProducts(token?: string): Promise<{ products: Product[]; sour
     console.warn('Could not read from Vercel Blob store:', err?.message || err);
   }
 
-  // 2. Fall back to local disk
+  // 4. Fall back to local disk
   const local = loadLocalDiskProducts();
   memoryProductsCache = local;
   lastBlobFetchTime = now;
-
-  // 3. If Blob is reachable and _database/products.json does not exist yet, seed it
-  if (token || process.env.VERCEL_OIDC_TOKEN) {
-    saveProductsToBlob(local, token).catch(() => {});
-  }
 
   return { products: local, source: 'local_disk' };
 }
 
 /**
- * Saves products to Vercel Blob store _database/products.json and local disk.
+ * Saves products to Vercel Blob backup and local disk.
  */
-async function saveProducts(
+async function saveProductsBackup(
   products: Product[],
   token?: string
 ): Promise<{ success: boolean; url?: string; source: string }> {
-  // Always update memory and disk immediately
   memoryProductsCache = products;
   lastBlobFetchTime = Date.now();
   saveLocalDiskProducts(products);
 
-  // Persist to Vercel Blob _database/products.json
   try {
     const putOptions = {
       access: 'public' as const,
@@ -264,24 +285,8 @@ async function saveProducts(
 
     const blob = await put(BLOB_DATABASE_PATH, JSON.stringify(products, null, 2), putOptions);
     return { success: true, url: blob.url, source: 'vercel_blob' };
-  } catch (err: any) {
-    console.warn('Vercel Blob persistence notice:', err?.message || err);
-    return { success: true, source: 'local_store' };
-  }
-}
-
-async function saveProductsToBlob(products: Product[], token?: string): Promise<string | null> {
-  try {
-    const putOptions = {
-      access: 'public' as const,
-      addRandomSuffix: false,
-      contentType: 'application/json',
-      ...(token ? { token } : {}),
-    };
-    const blob = await put(BLOB_DATABASE_PATH, JSON.stringify(products, null, 2), putOptions);
-    return blob.url;
   } catch {
-    return null;
+    return { success: true, source: 'local_store' };
   }
 }
 
@@ -322,10 +327,12 @@ export default async function handler(req: any, res: any) {
 
   // Safe query extraction
   let urlParams: URLSearchParams | null = null;
+  let pathname = '';
   try {
     const rawUrl = req?.url || '';
     const parsedUrl = new URL(rawUrl, `http://${req?.headers?.host || 'localhost'}`);
     urlParams = parsedUrl.searchParams;
+    pathname = parsedUrl.pathname;
   } catch {
     // ignore
   }
@@ -397,8 +404,41 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // Check if this is a reset request: POST /api/products/reset or ?action=reset
+    const isReset = pathname.endsWith('/reset') || getQueryParam('action') === 'reset' || body?.action === 'reset';
+    if (method === 'POST' && isReset) {
+      let resetList: Product[] = [];
+      let source = 'local';
+      if (isNeonConfigured()) {
+        try {
+          await ensureDbReady();
+          resetList = await resetProductsInDb(INITIAL_PRODUCTS);
+          source = 'neon_postgres';
+        } catch (err: any) {
+          console.warn('Neon reset error, resetting local:', err?.message || err);
+          resetList = INITIAL_PRODUCTS;
+        }
+      } else {
+        resetList = INITIAL_PRODUCTS;
+      }
+
+      await saveProductsBackup(resetList, token);
+      const okPayload = {
+        success: true,
+        message: 'Products catalog reset successfully',
+        products: resetList,
+        source,
+      };
+
+      if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+      return new Response(JSON.stringify(okPayload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // -------------------------------------------------------------
-    // POST /api/products
+    // POST /api/products (Create)
     // -------------------------------------------------------------
     if (method === 'POST') {
       if (!body || !body.name) {
@@ -410,15 +450,47 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      const productToInsert = normalizeProduct(body);
-      const { products } = await loadProducts(token);
-      const updatedList = [productToInsert, ...products];
+      let insertedProduct: Product;
+      let source = 'local_store';
 
-      const saveResult = await saveProducts(updatedList, token);
+      if (isNeonConfigured()) {
+        try {
+          await ensureDbReady();
+          insertedProduct = await createProductInDb({
+            name: body.name,
+            description: body.description || '',
+            price: Number(body.price) || 0,
+            category: body.category || 'Living Room',
+            coverImageUrl: body.coverImageUrl || body.images?.[0]?.url || '',
+            images: body.images || [],
+            isPublished: body.isPublished !== undefined ? Boolean(body.isPublished) : true,
+            isFeatured: Boolean(body.isFeatured),
+          });
+          source = 'neon_postgres';
+          // Mirror in memory & backup
+          const current = memoryProductsCache || [];
+          memoryProductsCache = [insertedProduct, ...current];
+          saveProductsBackup(memoryProductsCache, token).catch(() => {});
+        } catch (err: any) {
+          console.warn('Neon insertion error, falling back to local/blob store:', err?.message || err);
+          insertedProduct = normalizeProduct(body);
+          const { products } = await loadProducts(token);
+          const updatedList = [insertedProduct, ...products];
+          const saveResult = await saveProductsBackup(updatedList, token);
+          source = saveResult.source;
+        }
+      } else {
+        insertedProduct = normalizeProduct(body);
+        const { products } = await loadProducts(token);
+        const updatedList = [insertedProduct, ...products];
+        const saveResult = await saveProductsBackup(updatedList, token);
+        source = saveResult.source;
+      }
+
       const okPayload = {
         success: true,
-        product: productToInsert,
-        source: saveResult.source,
+        product: insertedProduct,
+        source,
       };
 
       if (typeof res?.status === 'function') return res.status(201).json(okPayload);
@@ -429,7 +501,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // -------------------------------------------------------------
-    // PUT /api/products
+    // PUT /api/products (Update)
     // -------------------------------------------------------------
     if (method === 'PUT') {
       const productId = getQueryParam('id') || body?.id;
@@ -442,26 +514,47 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      const { products } = await loadProducts(token);
       let updatedProduct: Product | null = null;
-      const updatedList = products.map((p) => {
-        if (p.id === productId) {
-          updatedProduct = normalizeProduct({ ...p, ...body, id: productId });
-          return updatedProduct;
-        }
-        return p;
-      });
+      let source = 'local_store';
 
-      if (!updatedProduct) {
-        updatedProduct = normalizeProduct({ ...body, id: productId });
-        updatedList.unshift(updatedProduct);
+      if (isNeonConfigured()) {
+        try {
+          await ensureDbReady();
+          updatedProduct = await updateProductInDb(productId, body);
+          source = 'neon_postgres';
+          if (updatedProduct) {
+            const current = memoryProductsCache || [];
+            memoryProductsCache = current.map((p) => (p.id === productId ? updatedProduct! : p));
+            saveProductsBackup(memoryProductsCache, token).catch(() => {});
+          }
+        } catch (err: any) {
+          console.warn('Neon update error, falling back to local/blob store:', err?.message || err);
+        }
       }
 
-      const saveResult = await saveProducts(updatedList, token);
+      if (!updatedProduct) {
+        const { products } = await loadProducts(token);
+        const updatedList = products.map((p) => {
+          if (p.id === productId) {
+            updatedProduct = normalizeProduct({ ...p, ...body, id: productId });
+            return updatedProduct;
+          }
+          return p;
+        });
+
+        if (!updatedProduct) {
+          updatedProduct = normalizeProduct({ ...body, id: productId });
+          updatedList.unshift(updatedProduct);
+        }
+
+        const saveResult = await saveProductsBackup(updatedList, token);
+        source = saveResult.source;
+      }
+
       const okPayload = {
         success: true,
         product: updatedProduct,
-        source: saveResult.source,
+        source,
       };
 
       if (typeof res?.status === 'function') return res.status(200).json(okPayload);
@@ -485,15 +578,30 @@ export default async function handler(req: any, res: any) {
         });
       }
 
+      let source = 'local_store';
+      if (isNeonConfigured()) {
+        try {
+          await ensureDbReady();
+          await deleteProductFromDb(productId);
+          source = 'neon_postgres';
+          const current = memoryProductsCache || [];
+          memoryProductsCache = current.filter((p) => p.id !== productId);
+          saveProductsBackup(memoryProductsCache, token).catch(() => {});
+        } catch (err: any) {
+          console.warn('Neon delete error, falling back to local/blob store:', err?.message || err);
+        }
+      }
+
       const { products } = await loadProducts(token);
       const updatedList = products.filter((p) => p.id !== productId);
+      const saveResult = await saveProductsBackup(updatedList, token);
+      if (source !== 'neon_postgres') source = saveResult.source;
 
-      const saveResult = await saveProducts(updatedList, token);
       const okPayload = {
         success: true,
         message: 'Product deleted successfully',
         id: productId,
-        source: saveResult.source,
+        source,
       };
 
       if (typeof res?.status === 'function') return res.status(200).json(okPayload);
@@ -511,7 +619,6 @@ export default async function handler(req: any, res: any) {
     });
   } catch (error: any) {
     console.error('Products API error:', error?.message || error);
-    // Even in case of an unexpected error, return fallback products with HTTP 200 instead of HTTP 500!
     const fallbackProducts = loadLocalDiskProducts();
     const fallbackPayload = {
       products: fallbackProducts,

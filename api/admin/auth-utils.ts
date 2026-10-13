@@ -1,41 +1,91 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Server-side Admin Authentication Utilities for Trust Furniture (أثاث الثقة).
  * 
  * Security properties:
- * 1. Fails closed: If ADMIN_PASSWORD is unset or empty, all login attempts are rejected.
+ * 1. Fails closed: If ADMIN_PASSWORD is unset and no local secret file exists, all logins are rejected.
  * 2. Constant-time password comparison to prevent timing attacks.
  * 3. HMAC-SHA256 signed stateless tokens with expiration timestamps,
  *    enabling verified sessions across serverless instances without shared database state.
- * 4. Never exposes or logs secrets.
+ * 4. Supports dynamic password regeneration and custom secret persistence.
  */
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TOKEN_PREFIX = 'trust_sess_';
 
-export function isAuthConfigured(): boolean {
-  const secret = process.env.ADMIN_PASSWORD;
-  return Boolean(secret && secret.trim().length > 0);
+export function getCustomPasswordFilePath(): string {
+  return path.resolve(process.cwd(), '.admin_password');
 }
 
-function getAuthSecret(): string | null {
+export function setCustomAdminPassword(newPassword: string): boolean {
+  try {
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 4) {
+      return false;
+    }
+    const targetPath = getCustomPasswordFilePath();
+    fs.writeFileSync(targetPath, newPassword.trim(), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Failed to save admin password:', err);
+    return false;
+  }
+}
+
+export function getAuthSecret(): string | null {
+  // 1. Priority: custom generated or saved admin password file (.admin_password)
+  try {
+    const customPath = getCustomPasswordFilePath();
+    if (fs.existsSync(customPath)) {
+      const content = fs.readFileSync(customPath, 'utf8').trim();
+      if (content.length > 0) return content;
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Fallback: process.env.ADMIN_PASSWORD
   const secret = process.env.ADMIN_PASSWORD;
   if (!secret || !secret.trim()) return null;
   return secret.trim();
 }
 
+export function isAuthConfigured(): boolean {
+  const secret = getAuthSecret();
+  return Boolean(secret && secret.trim().length > 0);
+}
+
+/**
+ * Constant-time comparison helper.
+ */
+function constantTimeCompare(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const hashA = crypto.createHash('sha256').update(a).digest();
+  const hashB = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
+
 /**
  * Constant-time password verification using SHA-256 digests.
+ * Accepts either the freshly generated/custom password or the environment password.
  */
 export function verifyAdminPassword(inputPassword: string): boolean {
-  const configuredPassword = getAuthSecret();
-  if (!configuredPassword || !inputPassword) return false;
+  if (!inputPassword || typeof inputPassword !== 'string') return false;
 
-  const expectedHash = crypto.createHash('sha256').update(configuredPassword).digest();
-  const inputHash = crypto.createHash('sha256').update(inputPassword).digest();
+  const currentSecret = getAuthSecret();
+  if (currentSecret && constantTimeCompare(inputPassword, currentSecret)) {
+    return true;
+  }
 
-  return crypto.timingSafeEqual(expectedHash, inputHash);
+  // Also support the original environment password if distinct
+  const envSecret = process.env.ADMIN_PASSWORD?.trim();
+  if (envSecret && envSecret !== currentSecret && constantTimeCompare(inputPassword, envSecret)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -68,9 +118,6 @@ export function verifySessionToken(token: string | null | undefined): boolean {
   if (!token || typeof token !== 'string') return false;
   if (!token.startsWith(TOKEN_PREFIX)) return false;
 
-  const secret = getAuthSecret();
-  if (!secret) return false;
-
   const raw = token.slice(TOKEN_PREFIX.length);
   const parts = raw.split('.');
   if (parts.length !== 2) return false;
@@ -78,19 +125,32 @@ export function verifySessionToken(token: string | null | undefined): boolean {
   const [payloadBase64, signature] = parts;
   if (!payloadBase64 || !signature) return false;
 
-  // Verify HMAC signature in constant time
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(payloadBase64)
-    .digest('base64url');
+  // Candidate secrets to verify against
+  const secrets: string[] = [];
+  const currentSecret = getAuthSecret();
+  if (currentSecret) secrets.push(currentSecret);
+  const envSecret = process.env.ADMIN_PASSWORD?.trim();
+  if (envSecret && !secrets.includes(envSecret)) secrets.push(envSecret);
 
-  if (signature.length !== expectedSignature.length) return false;
-  const sigMatch = crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  if (secrets.length === 0) return false;
 
-  if (!sigMatch) return false;
+  let isValidSig = false;
+  for (const s of secrets) {
+    const expectedSignature = crypto
+      .createHmac('sha256', s)
+      .update(payloadBase64)
+      .digest('base64url');
+
+    if (
+      signature.length === expectedSignature.length &&
+      crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
+    ) {
+      isValidSig = true;
+      break;
+    }
+  }
+
+  if (!isValidSig) return false;
 
   // Verify expiration
   try {
