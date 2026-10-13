@@ -8,6 +8,10 @@
       "destination": "/api/blob/status"
     },
     {
+      "source": "/api/products/reset",
+      "destination": "/api/products?action=reset"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

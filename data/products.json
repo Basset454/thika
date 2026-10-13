@@ -1,5 +1,49 @@
 [
   {
+    "id": "prod-1791926267102-shztb",
+    "name": "طاولة طعام خشب زان فاخرة - فحص قاعدة البيانات",
+    "description": "قطعة حقيقية مسجلة في Neon PostgreSQL ومرفوعة على Vercel Blob.",
+    "price": 4950,
+    "category": "Dining Room",
+    "coverImageUrl": "https://test23-blob.public.blob.vercel-storage.com/products/dining-table-neon-test.jpg",
+    "images": [
+      {
+        "id": "img-blob-tbl-1",
+        "url": "https://test23-blob.public.blob.vercel-storage.com/products/dining-table-neon-test.jpg",
+        "name": "dining-table-neon-test.jpg",
+        "isCover": true,
+        "pathname": "products/dining-table-neon-test.jpg",
+        "uploadedAt": "2026-10-13T21:17:47.099Z"
+      }
+    ],
+    "isPublished": true,
+    "isFeatured": true,
+    "createdAt": "2026-10-13T21:17:47.102Z",
+    "updatedAt": "2026-10-13T21:17:47.102Z"
+  },
+  {
+    "id": "prod-1791926221538-b7rbs",
+    "name": "طاولة طعام خشب زان فاخرة - الثقة",
+    "description": "طاولة مصنوعة يدوياً من خشب الزان الصلب مع كراسي مكسوة بالقماش الفاخر.",
+    "price": 3400,
+    "category": "Dining Room",
+    "coverImageUrl": "https://test23-blob.public.blob.vercel-storage.com/products/table-test-123.jpg",
+    "images": [
+      {
+        "id": "img-blob-1",
+        "url": "https://test23-blob.public.blob.vercel-storage.com/products/table-test-123.jpg",
+        "name": "table-test-123.jpg",
+        "isCover": true,
+        "pathname": "products/table-test-123.jpg",
+        "uploadedAt": "2026-10-13T21:17:01.535Z"
+      }
+    ],
+    "isPublished": true,
+    "isFeatured": true,
+    "createdAt": "2026-10-13T21:17:01.539Z",
+    "updatedAt": "2026-10-13T21:17:01.539Z"
+  },
+  {
     "id": "prod-f4",
     "name": "Architect Ergonomic Desk",
     "description": "Sleek workspace desk made of solid ash wood with integrated wire management channel, subtle brass accents, and dual soft-close drawers.",

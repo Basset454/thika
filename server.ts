@@ -11,6 +11,8 @@ import blobStatusHandler from './api/blob/status.js';
 import loginHandler from './api/admin/login';
 import verifyHandler from './api/admin/verify';
 import logoutHandler from './api/admin/logout';
+import dbStatusHandler from './api/db-status.js';
+import changePasswordHandler from './api/admin/change-password.js';
 
 dotenv.config();
 
@@ -59,6 +61,14 @@ app.all('/api/admin/logout', (req: Request, res: Response) => {
   return logoutHandler(req, res);
 });
 
+app.all('/api/admin/change-password', (req: Request, res: Response) => {
+  return changePasswordHandler(req, res);
+});
+
+app.all('/api/db-status', (req: Request, res: Response) => {
+  return dbStatusHandler(req, res);
+});
+
 // -------------------------------------------------------------
 // 2. API: Vercel Blob Status
 // -------------------------------------------------------------
@@ -69,11 +79,11 @@ app.all(['/api/blob/status', '/api/blob-status'], (req: Request, res: Response) 
 // -------------------------------------------------------------
 // 3. API: Products APIs (Authoritative: Vercel Blob _database/products.json)
 // -------------------------------------------------------------
-app.all('/api/products', (req: Request, res: Response) => {
+app.all(['/api/products', '/api/products/reset'], (req: Request, res: Response) => {
   return productsHandler(req, res);
 });
 app.all('/api/products/:id', (req: Request, res: Response) => {
-  req.query.id = req.params.id;
+  if (req.params.id !== 'reset') req.query.id = req.params.id;
   return productsHandler(req, res);
 });
 

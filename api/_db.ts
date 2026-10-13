@@ -185,7 +185,7 @@ export async function createProductInDb(
   productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<Product> {
   const sql = getNeonSql();
-  const id = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const id = (productData as any).id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date().toISOString();
   const coverImageUrl = productData.coverImageUrl || productData.images?.[0]?.url || '';
 

@@ -1,7 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import { put, list } from '@vercel/blob';
 import { checkAdminAuth } from './admin/_auth-utils.js';
+import { 
+  isNeonConfigured, 
+  getAllProductsFromDb, 
+  getProductByIdFromDb, 
+  createProductInDb, 
+  updateProductInDb, 
+  deleteProductFromDb, 
+  resetProductsInDb,
+  initDatabase 
+} from './_db.js';
 
 export interface ProductImage {
   id: string;
@@ -80,7 +89,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-f3',
     name: 'Bouclé Cloud Modular Sofa',
-    description: 'Deep-seat modular 3-piece sectional sofa covered in ivory bouclé fabric. High-density foam core with feather blend topper for ultimate comfort.',
+    description: 'Deep-seat modular lounge sofa covered in tactile cream bouclé fabric. High-resilience core with down-blend top cushioning for cloud-like comfort.',
     price: 1650,
     category: 'Living Room',
     isPublished: true,
@@ -90,13 +99,13 @@ export const INITIAL_PRODUCTS: Product[] = [
       {
         id: 'img-f3-1',
         url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1000&auto=format&fit=crop&q=80',
-        name: 'boucle_sofa.jpg',
+        name: 'cloud_boucle_sofa.jpg',
         isCover: true,
-        uploadedAt: new Date(Date.now() - 86400000).toISOString(),
+        uploadedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
       }
     ],
     createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
   },
   {
     id: 'prod-f4',
@@ -113,189 +122,73 @@ export const INITIAL_PRODUCTS: Product[] = [
         url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=1000&auto=format&fit=crop&q=80',
         name: 'architect_desk.jpg',
         isCover: true,
-        uploadedAt: new Date(Date.now() - 86400000).toISOString(),
+        uploadedAt: new Date(Date.now() - 86400000 * 6).toISOString(),
       }
     ],
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+    updatedAt: new Date(Date.now() - 86400000 * 6).toISOString(),
   }
 ];
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const LOCAL_PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
-const BLOB_DATABASE_PATH = '_database/products.json';
-
-// In-memory cache for ultra-fast response
-let memoryProductsCache: Product[] | null = null;
-let lastBlobFetchTime = 0;
-const CACHE_TTL_MS = 10000; // 10 seconds cache to avoid excessive requests
-
-/**
- * Neutralizes any PostgreSQL connection strings accidentally entered into BLOB_READ_WRITE_TOKEN.
- * Returns only genuine Vercel Blob tokens starting with 'vercel_blob_rw_'.
- */
-export function getValidBlobToken(explicitToken?: string): string | undefined {
-  const tokenCandidate = explicitToken || process.env.BLOB_READ_WRITE_TOKEN;
-  if (!tokenCandidate || typeof tokenCandidate !== 'string') return undefined;
-
-  const trimmed = tokenCandidate.trim().replace(/^['"]|['"]$/g, '');
-
-  // If accidentally entered postgres URI, neutralize it
-  if (trimmed.startsWith('postgres://') || trimmed.startsWith('postgresql://')) {
-    if (process.env.BLOB_READ_WRITE_TOKEN === tokenCandidate) {
-      delete process.env.BLOB_READ_WRITE_TOKEN;
-    }
-    return undefined;
-  }
-
-  if (!trimmed.startsWith('vercel_blob_rw_')) {
-    return undefined;
-  }
-
-  return trimmed;
-}
-
-// Neutralize on load
-if (
-  process.env.BLOB_READ_WRITE_TOKEN &&
-  (process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgres://') ||
-    process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgresql://') ||
-    !process.env.BLOB_READ_WRITE_TOKEN.startsWith('vercel_blob_rw_'))
-) {
-  delete process.env.BLOB_READ_WRITE_TOKEN;
-}
-
 function loadLocalDiskProducts(): Product[] {
   try {
-    if (fs.existsSync(LOCAL_PRODUCTS_FILE)) {
-      const data = fs.readFileSync(LOCAL_PRODUCTS_FILE, 'utf-8');
-      const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+    const candidates = [
+      path.resolve(process.cwd(), 'data', 'products.json'),
+      path.resolve(process.cwd(), '..', 'data', 'products.json'),
+      path.resolve('/var/task', 'data', 'products.json'),
+    ];
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       }
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn('Could not read products from local disk:', err);
   }
   return INITIAL_PRODUCTS;
 }
 
 function saveLocalDiskProducts(products: Product[]) {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const dataDir = path.resolve(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
-    fs.writeFileSync(LOCAL_PRODUCTS_FILE, JSON.stringify(products, null, 2), 'utf-8');
+    fs.writeFileSync(path.join(dataDir, 'products.json'), JSON.stringify(products, null, 2), 'utf8');
   } catch {
-    // ignore
+    // ignore in serverless read-only contexts
   }
 }
 
-/**
- * Loads products from Vercel Blob store _database/products.json.
- * Falls back safely to disk/memory so the API NEVER crashes.
- */
-async function loadProducts(token?: string): Promise<{ products: Product[]; source: string }> {
-  const now = Date.now();
-  if (memoryProductsCache && now - lastBlobFetchTime < CACHE_TTL_MS) {
-    return { products: memoryProductsCache, source: 'cache' };
-  }
+export function normalizeProduct(raw: any): Product {
+  const images: ProductImage[] = Array.isArray(raw?.images)
+    ? raw.images.map((img: any, idx: number) => ({
+        id: String(img?.id || `img-${Date.now()}-${idx}`),
+        url: String(img?.url || ''),
+        pathname: img?.pathname ? String(img.pathname) : undefined,
+        isCover: Boolean(img?.isCover),
+        name: img?.name ? String(img.name) : undefined,
+        size: typeof img?.size === 'number' ? img.size : undefined,
+        uploadedAt: String(img?.uploadedAt || new Date().toISOString()),
+      }))
+    : [];
 
-  // 1. Try fetching from Vercel Blob _database/products.json
-  try {
-    const listOptions: Record<string, any> = {
-      prefix: BLOB_DATABASE_PATH,
-      limit: 10,
-    };
-    if (token) listOptions.token = token;
-
-    const listResult = await list(listOptions);
-    const dbBlob = listResult.blobs.find((b) => b.pathname === BLOB_DATABASE_PATH);
-
-    if (dbBlob && dbBlob.url) {
-      const res = await fetch(`${dbBlob.url}?t=${now}`, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          memoryProductsCache = data;
-          lastBlobFetchTime = now;
-          saveLocalDiskProducts(data);
-          return { products: data, source: 'vercel_blob' };
-        }
-      }
-    }
-  } catch (err: any) {
-    console.warn('Could not read from Vercel Blob store:', err?.message || err);
-  }
-
-  // 2. Fall back to local disk
-  const local = loadLocalDiskProducts();
-  memoryProductsCache = local;
-  lastBlobFetchTime = now;
-
-  // 3. If Blob is reachable and _database/products.json does not exist yet, seed it
-  if (token || process.env.VERCEL_OIDC_TOKEN) {
-    saveProductsToBlob(local, token).catch(() => {});
-  }
-
-  return { products: local, source: 'local_disk' };
-}
-
-/**
- * Saves products to Vercel Blob store _database/products.json and local disk.
- */
-async function saveProducts(
-  products: Product[],
-  token?: string
-): Promise<{ success: boolean; url?: string; source: string }> {
-  // Always update memory and disk immediately
-  memoryProductsCache = products;
-  lastBlobFetchTime = Date.now();
-  saveLocalDiskProducts(products);
-
-  // Persist to Vercel Blob _database/products.json
-  try {
-    const putOptions = {
-      access: 'public' as const,
-      addRandomSuffix: false,
-      contentType: 'application/json',
-      ...(token ? { token } : {}),
-    };
-
-    const blob = await put(BLOB_DATABASE_PATH, JSON.stringify(products, null, 2), putOptions);
-    return { success: true, url: blob.url, source: 'vercel_blob' };
-  } catch (err: any) {
-    console.warn('Vercel Blob persistence notice:', err?.message || err);
-    return { success: true, source: 'local_store' };
-  }
-}
-
-async function saveProductsToBlob(products: Product[], token?: string): Promise<string | null> {
-  try {
-    const putOptions = {
-      access: 'public' as const,
-      addRandomSuffix: false,
-      contentType: 'application/json',
-      ...(token ? { token } : {}),
-    };
-    const blob = await put(BLOB_DATABASE_PATH, JSON.stringify(products, null, 2), putOptions);
-    return blob.url;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeProduct(raw: any): Product {
-  const images = Array.isArray(raw?.images) ? raw.images : [];
-  const coverObj = images.find((i: any) => i.isCover) || images[0];
-  const coverImageUrl = raw?.coverImageUrl || coverObj?.url || '';
+  const coverImageUrl =
+    raw?.coverImageUrl ||
+    images.find((img) => img.isCover)?.url ||
+    images[0]?.url ||
+    'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=1000&auto=format&fit=crop&q=80';
 
   return {
-    id: raw?.id || `prod-f${Date.now()}`,
-    name: String(raw?.name || '').trim(),
+    id: String(raw?.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
+    name: String(raw?.name || 'Untitled Furniture Item'),
     price: Number(raw?.price) || 0,
-    description: String(raw?.description || '').trim(),
-    category: String(raw?.category || 'Living Room').trim(),
+    description: String(raw?.description || ''),
+    category: String(raw?.category || 'Living Room'),
     images,
     coverImageUrl,
     isPublished: raw?.isPublished !== undefined ? Boolean(raw.isPublished) : true,
@@ -310,11 +203,10 @@ export default async function handler(req: any, res: any) {
   if (res?.setHeader) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-blob-token');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-blob-token, x-admin-token');
   }
 
   const method = (req?.method || 'GET').toUpperCase();
-
   if (method === 'OPTIONS') {
     if (typeof res?.status === 'function') return res.status(200).end();
     return new Response(null, { status: 200 });
@@ -322,8 +214,8 @@ export default async function handler(req: any, res: any) {
 
   // Safe query extraction
   let urlParams: URLSearchParams | null = null;
+  const rawUrl = req?.url || '';
   try {
-    const rawUrl = req?.url || '';
     const parsedUrl = new URL(rawUrl, `http://${req?.headers?.host || 'localhost'}`);
     urlParams = parsedUrl.searchParams;
   } catch {
@@ -341,32 +233,53 @@ export default async function handler(req: any, res: any) {
     return undefined;
   };
 
-  const explicitToken = req?.headers?.['x-blob-token'] || req?.headers?.get?.('x-blob-token');
-  const token = getValidBlobToken(explicitToken);
-
   try {
     // -------------------------------------------------------------
     // GET /api/products
     // -------------------------------------------------------------
     if (method === 'GET') {
+      const productId = getQueryParam('id');
       const wantsAll =
         getQueryParam('all') === 'true' ||
         getQueryParam('admin') === 'true';
-
       const isAdmin = wantsAll ? checkAdminAuth(req) : false;
       const includeUnpublished = wantsAll && isAdmin;
 
-      const { products, source } = await loadProducts(token);
-      const filtered = includeUnpublished
-        ? products
-        : products.filter((p) => p.isPublished !== false);
+      // 1. Primary Source: Neon PostgreSQL
+      if (isNeonConfigured()) {
+        try {
+          if (productId) {
+            const product = await getProductByIdFromDb(productId);
+            if (!product) {
+              const notFound = { error: 'Product not found' };
+              if (typeof res?.status === 'function') return res.status(404).json(notFound);
+              return new Response(JSON.stringify(notFound), { status: 404, headers: { 'Content-Type': 'application/json' } });
+            }
+            const payload = { product, source: 'neon_postgresql' };
+            if (typeof res?.status === 'function') return res.status(200).json(payload);
+            return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
 
-      const payload = { products: filtered, source };
+          const dbProducts = await getAllProductsFromDb();
+          const filtered = includeUnpublished
+            ? dbProducts
+            : dbProducts.filter((p) => p.isPublished !== false);
+          const payload = { products: filtered, source: 'neon_postgresql' };
+          if (typeof res?.status === 'function') return res.status(200).json(payload);
+          return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        } catch (dbErr: any) {
+          console.warn('Neon database query failed, attempting fallback:', dbErr?.message || dbErr);
+        }
+      }
+
+      // 2. Fallback to local storage if Neon unavailable
+      const local = loadLocalDiskProducts();
+      const filtered = includeUnpublished
+        ? local
+        : local.filter((p) => p.isPublished !== false);
+      const payload = { products: filtered, source: 'local_disk' };
       if (typeof res?.status === 'function') return res.status(200).json(payload);
-      return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // Require admin authentication for all mutations (POST, PUT, DELETE)
@@ -398,34 +311,79 @@ export default async function handler(req: any, res: any) {
     }
 
     // -------------------------------------------------------------
-    // POST /api/products
+    // POST /api/products (Create OR Reset)
     // -------------------------------------------------------------
     if (method === 'POST') {
+      const isResetAction = 
+        body?.action === 'reset' || 
+        getQueryParam('action') === 'reset' || 
+        rawUrl.endsWith('/reset') || 
+        rawUrl.includes('/products/reset');
+
+      if (isResetAction) {
+        if (isNeonConfigured()) {
+          try {
+            const resetList = await resetProductsInDb(INITIAL_PRODUCTS);
+            saveLocalDiskProducts(resetList);
+            const okPayload = {
+              success: true,
+              products: resetList,
+              source: 'neon_postgresql',
+              message: 'Database reset to initial furniture catalog in Neon PostgreSQL.',
+            };
+            if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+            return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          } catch (err: any) {
+            console.error('Failed to reset products in Neon:', err);
+          }
+        }
+        saveLocalDiskProducts(INITIAL_PRODUCTS);
+        const okPayload = { success: true, products: INITIAL_PRODUCTS, source: 'local_disk' };
+        if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+        return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
       if (!body || !body.name) {
         const errPayload = { error: 'Product name is required' };
         if (typeof res?.status === 'function') return res.status(400).json(errPayload);
-        return new Response(JSON.stringify(errPayload), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify(errPayload), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
       const productToInsert = normalizeProduct(body);
-      const { products } = await loadProducts(token);
-      const updatedList = [productToInsert, ...products];
 
-      const saveResult = await saveProducts(updatedList, token);
-      const okPayload = {
-        success: true,
-        product: productToInsert,
-        source: saveResult.source,
-      };
+      // Primary: Save in Neon PostgreSQL
+      if (isNeonConfigured()) {
+        try {
+          const created = await createProductInDb(productToInsert);
+          // Mirror to disk cache
+          try {
+            const current = loadLocalDiskProducts();
+            saveLocalDiskProducts([created, ...current]);
+          } catch {
+            // ignore
+          }
+          const okPayload = {
+            success: true,
+            product: created,
+            source: 'neon_postgresql',
+          };
+          if (typeof res?.status === 'function') return res.status(201).json(okPayload);
+          return new Response(JSON.stringify(okPayload), { status: 201, headers: { 'Content-Type': 'application/json' } });
+        } catch (dbErr: any) {
+          console.error('Failed to insert product into Neon PostgreSQL:', dbErr);
+          const errPayload = { error: `Failed to insert product into Neon: ${dbErr?.message || dbErr}` };
+          if (typeof res?.status === 'function') return res.status(500).json(errPayload);
+          return new Response(JSON.stringify(errPayload), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
 
+      // Fallback: Local disk
+      const current = loadLocalDiskProducts();
+      const updatedList = [productToInsert, ...current];
+      saveLocalDiskProducts(updatedList);
+      const okPayload = { success: true, product: productToInsert, source: 'local_disk' };
       if (typeof res?.status === 'function') return res.status(201).json(okPayload);
-      return new Response(JSON.stringify(okPayload), {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify(okPayload), { status: 201, headers: { 'Content-Type': 'application/json' } });
     }
 
     // -------------------------------------------------------------
@@ -436,39 +394,51 @@ export default async function handler(req: any, res: any) {
       if (!productId) {
         const errPayload = { error: 'Product ID is required for update' };
         if (typeof res?.status === 'function') return res.status(400).json(errPayload);
-        return new Response(JSON.stringify(errPayload), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify(errPayload), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const { products } = await loadProducts(token);
+      // Primary: Update in Neon PostgreSQL
+      if (isNeonConfigured()) {
+        try {
+          const updated = await updateProductInDb(productId, body);
+          if (!updated) {
+            const notFound = { error: 'Product not found in Neon database' };
+            if (typeof res?.status === 'function') return res.status(404).json(notFound);
+            return new Response(JSON.stringify(notFound), { status: 404, headers: { 'Content-Type': 'application/json' } });
+          }
+          const okPayload = {
+            success: true,
+            product: updated,
+            source: 'neon_postgresql',
+          };
+          if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+          return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        } catch (dbErr: any) {
+          console.error('Failed to update product in Neon PostgreSQL:', dbErr);
+          const errPayload = { error: `Failed to update product in Neon: ${dbErr?.message || dbErr}` };
+          if (typeof res?.status === 'function') return res.status(500).json(errPayload);
+          return new Response(JSON.stringify(errPayload), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+
+      // Fallback: Local disk
+      const current = loadLocalDiskProducts();
       let updatedProduct: Product | null = null;
-      const updatedList = products.map((p) => {
+      const updatedList = current.map((p) => {
         if (p.id === productId) {
           updatedProduct = normalizeProduct({ ...p, ...body, id: productId });
           return updatedProduct;
         }
         return p;
       });
-
       if (!updatedProduct) {
         updatedProduct = normalizeProduct({ ...body, id: productId });
         updatedList.unshift(updatedProduct);
       }
-
-      const saveResult = await saveProducts(updatedList, token);
-      const okPayload = {
-        success: true,
-        product: updatedProduct,
-        source: saveResult.source,
-      };
-
+      saveLocalDiskProducts(updatedList);
+      const okPayload = { success: true, product: updatedProduct, source: 'local_disk' };
       if (typeof res?.status === 'function') return res.status(200).json(okPayload);
-      return new Response(JSON.stringify(okPayload), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // -------------------------------------------------------------
@@ -479,49 +449,55 @@ export default async function handler(req: any, res: any) {
       if (!productId) {
         const errPayload = { error: 'Product ID is required for deletion' };
         if (typeof res?.status === 'function') return res.status(400).json(errPayload);
-        return new Response(JSON.stringify(errPayload), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify(errPayload), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const { products } = await loadProducts(token);
-      const updatedList = products.filter((p) => p.id !== productId);
+      // Primary: Delete in Neon PostgreSQL
+      if (isNeonConfigured()) {
+        try {
+          await deleteProductFromDb(productId);
+          const okPayload = {
+            success: true,
+            message: 'Product deleted successfully from Neon database',
+            id: productId,
+            source: 'neon_postgresql',
+          };
+          if (typeof res?.status === 'function') return res.status(200).json(okPayload);
+          return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        } catch (dbErr: any) {
+          console.error('Failed to delete product in Neon PostgreSQL:', dbErr);
+          const errPayload = { error: `Failed to delete product in Neon: ${dbErr?.message || dbErr}` };
+          if (typeof res?.status === 'function') return res.status(500).json(errPayload);
+          return new Response(JSON.stringify(errPayload), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
 
-      const saveResult = await saveProducts(updatedList, token);
+      // Fallback: Local disk
+      const current = loadLocalDiskProducts();
+      const updatedList = current.filter((p) => p.id !== productId);
+      saveLocalDiskProducts(updatedList);
       const okPayload = {
         success: true,
         message: 'Product deleted successfully',
         id: productId,
-        source: saveResult.source,
+        source: 'local_disk',
       };
-
       if (typeof res?.status === 'function') return res.status(200).json(okPayload);
-      return new Response(JSON.stringify(okPayload), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify(okPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     const unsuppPayload = { error: 'Method not allowed' };
     if (typeof res?.status === 'function') return res.status(405).json(unsuppPayload);
-    return new Response(JSON.stringify(unsuppPayload), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify(unsuppPayload), { status: 405, headers: { 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error('Products API error:', error?.message || error);
-    // Even in case of an unexpected error, return fallback products with HTTP 200 instead of HTTP 500!
+    console.error('Products API unhandled error:', error?.message || error);
     const fallbackProducts = loadLocalDiskProducts();
     const fallbackPayload = {
       products: fallbackProducts,
       source: 'fallback_store',
-      notice: 'Served from resilient storage.',
+      error: error?.message || String(error),
     };
     if (typeof res?.status === 'function') return res.status(200).json(fallbackPayload);
-    return new Response(JSON.stringify(fallbackPayload), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify(fallbackPayload), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 }
