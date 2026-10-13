@@ -1,9 +1,8 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product } from '../types';
-import { ARABIC_CATEGORIES, STORE_BRANCHES, formatDZD } from '../data/initialProducts';
-import { BranchLocationsSection } from './BranchLocationsSection';
+import { ARABIC_CATEGORIES, formatDZD } from '../data/initialProducts';
 import { EditorialHero } from './EditorialHero';
-import { CinematicStoryStage } from './CinematicStoryStage';
+import { BranchLocationsSection } from './BranchLocationsSection';
 import {
   Eye,
   X,
@@ -11,18 +10,19 @@ import {
   SlidersHorizontal,
   Layers,
   MapPin,
-  Sparkles,
   ShieldCheck,
   Truck,
   RotateCcw,
   MessageCircle,
+  PhoneCall,
   ChevronLeft,
   ChevronRight,
-  ArrowDown,
-  ArrowLeft,
-  Compass,
+  Sparkles,
   Check,
-  Armchair
+  CheckCircle2,
+  Armchair,
+  Flame,
+  Award
 } from 'lucide-react';
 
 interface CustomerStoreProps {
@@ -52,34 +52,19 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
 
-  // Active Story Chapter Tracker
-  const [activeChapter, setActiveChapter] = useState<'entrance' | 'story' | 'office' | 'catalog' | 'branches' | 'craft'>('entrance');
-
   // Filter only published products for public storefront
   const publishedProducts = useMemo(() => {
     return products.filter((p) => p.isPublished !== false);
   }, [products]);
 
-  // Featured Room Products from real data
-  const livingProducts = useMemo(() => {
-    return publishedProducts.filter((p) => {
-      const c = (p.category || '').toLowerCase();
-      return c.includes('living') || c.includes('معيشة') || c.includes('صالون');
-    });
-  }, [publishedProducts]);
-
-  const diningProducts = useMemo(() => {
-    return publishedProducts.filter((p) => {
-      const c = (p.category || '').toLowerCase();
-      return c.includes('dining') || c.includes('طعام') || c.includes('سفرة');
-    });
-  }, [publishedProducts]);
-
-  const officeProducts = useMemo(() => {
-    return publishedProducts.filter((p) => {
-      const c = (p.category || '').toLowerCase();
-      return c.includes('office') || c.includes('مكتب') || c.includes('عمل');
-    });
+  // Featured Products (3 to 4 curated pieces)
+  const featuredProducts = useMemo(() => {
+    const explicitlyFeatured = publishedProducts.filter((p) => p.isFeatured);
+    if (explicitlyFeatured.length >= 3) {
+      return explicitlyFeatured.slice(0, 4);
+    }
+    // Fallback to top published items if fewer than 3 items marked as featured
+    return publishedProducts.slice(0, 4);
   }, [publishedProducts]);
 
   // Filter and sort products for catalogue
@@ -127,39 +112,6 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
     return result;
   }, [publishedProducts, selectedCategory, searchQuery, sortBy]);
 
-  // Track chapters using IntersectionObserver
-  useEffect(() => {
-    const chapters = [
-      { id: 'hero-entrance', name: 'entrance' },
-      { id: 'cinematic-story', name: 'story' },
-      { id: 'world-office', name: 'office' },
-      { id: 'collection', name: 'catalog' },
-      { id: 'branches', name: 'branches' },
-      { id: 'story', name: 'craft' },
-    ];
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const found = chapters.find((c) => c.id === entry.target.id);
-            if (found) {
-              setActiveChapter(found.name as any);
-            }
-          }
-        });
-      },
-      { threshold: 0.25 }
-    );
-
-    chapters.forEach((c) => {
-      const el = document.getElementById(c.id);
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
   const openProductModal = (product: Product) => {
     setActiveProduct(product);
     setActiveImageIndex(0);
@@ -183,7 +135,6 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         setActiveImageIndex((prev) => (prev < activeProduct.images.length - 1 ? prev + 1 : 0));
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeProduct]);
@@ -194,19 +145,16 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
     setSortBy('default');
   };
 
-  const jumpToWorld = (catName: string, anchorId: string) => {
-    handleCategorySelect(catName);
+  const scrollToAnchor = (anchorId: string) => {
     const target = document.getElementById(anchorId);
     if (target) {
       target.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  const scrollToAnchor = (anchorId: string) => {
-    const target = document.getElementById(anchorId);
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
-    }
+  const selectCategoryAndScroll = (category: string) => {
+    handleCategorySelect(category);
+    scrollToAnchor('catalog');
   };
 
   const getCategoryArabicName = (catName: string) => {
@@ -219,479 +167,511 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
     return found ? found.nameAr : catName;
   };
 
+  // Visual Category definitions with authentic imagery
+  const visualCategories = [
+    {
+      id: 'Living Room',
+      nameAr: 'الصالونات والمعيشة',
+      subtitle: 'أطقم صالونات وأرائك وثير بتنجيد فاخر',
+      image:
+        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('living'))?.coverImageUrl ||
+        'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&auto=format&fit=crop&q=80',
+    },
+    {
+      id: 'Dining Room',
+      nameAr: 'غرف الطعام والطاولات',
+      subtitle: 'طاولات خشب زان وبلوط صلب مع كراسي مكسوة',
+      image:
+        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('dining'))?.coverImageUrl ||
+        'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=900&auto=format&fit=crop&q=80',
+    },
+    {
+      id: 'Bedroom',
+      nameAr: 'غرف النوم والأسرّة',
+      subtitle: 'أسرّة منجدة وخزائن مدمجة بلمسات هادئة',
+      image:
+        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('bed'))?.coverImageUrl ||
+        'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=900&auto=format&fit=crop&q=80',
+    },
+    {
+      id: 'Office',
+      nameAr: 'المكاتب والديكور',
+      subtitle: 'مساحات عمل مريحة وإكسسوارات ديكور راقية',
+      image:
+        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('office'))?.coverImageUrl ||
+        'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=900&auto=format&fit=crop&q=80',
+    },
+  ];
+
   return (
-    <div className="space-y-0 pb-24">
+    <div className="space-y-0 pb-20">
       
       {/* =========================================================================
-          CHAPTER NAVIGATION DOCK (Non-intrusive Ambient Orientation)
-          ========================================================================= */}
-      <aside
-        aria-label="مؤشر فصول الجولة المعمارية"
-        className="hidden xl:flex fixed left-6 top-1/2 -translate-y-1/2 z-30 flex-col gap-2 bg-white/85 backdrop-blur-md p-2 rounded-2xl border border-neutral-200/90 shadow-[0_8px_30px_rgb(0,0,0,0.06)] text-xs transition-opacity duration-300"
-      >
-        <button
-          onClick={() => scrollToAnchor('hero-entrance')}
-          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-            activeChapter === 'entrance'
-              ? 'bg-[#1E1E1E] text-white font-bold shadow-xs'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100/70'
-          }`}
-          title="الانتقال للمدخل المعماري"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span className="text-[11px]">01 · المدخل</span>
-        </button>
-
-        <button
-          onClick={() => scrollToAnchor('cinematic-story')}
-          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-            activeChapter === 'story'
-              ? 'bg-[#1E1E1E] text-white font-bold shadow-xs'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100/70'
-          }`}
-          title="الانتقال إلى الجولة السينمائية المتقاطعة"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span className="text-[11px]">02 · الجولة السينمائية</span>
-        </button>
-
-        <button
-          onClick={() => scrollToAnchor('world-office')}
-          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-            activeChapter === 'office'
-              ? 'bg-[#1E1E1E] text-white font-bold shadow-xs'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100/70'
-          }`}
-          title="الانتقال إلى مساحات العمل والمكاتب"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span className="text-[11px]">03 · المكاتب</span>
-        </button>
-
-        <button
-          onClick={() => scrollToAnchor('collection')}
-          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-            activeChapter === 'catalog'
-              ? 'bg-[#1E1E1E] text-white font-bold shadow-xs'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100/70'
-          }`}
-          title="الانتقال للكتالوج الكامل"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span className="text-[11px]">04 · الكتالوج</span>
-        </button>
-
-        <button
-          onClick={() => scrollToAnchor('branches')}
-          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-            activeChapter === 'branches'
-              ? 'bg-[#FF551A] text-white font-bold shadow-xs'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100/70'
-          }`}
-          title="الانتقال إلى فروع ومعارض أثاث الثقة"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span className="text-[11px]">05 · الفروع</span>
-        </button>
-
-        <button
-          onClick={() => scrollToAnchor('story')}
-          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-            activeChapter === 'craft'
-              ? 'bg-[#1E1E1E] text-white font-bold shadow-xs'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100/70'
-          }`}
-          title="الانتقال إلى فلسفة الخامات والحرفة"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-          <span className="text-[11px]">06 · الحرفية</span>
-        </button>
-      </aside>
-
-      {/* =========================================================================
-          CHAPTER A: THE FULL-BLEED EDITORIAL HERO (المدخل المعماري)
+          أ) الواجهة الرئيسية (HERO SECTION)
           ========================================================================= */}
       <EditorialHero
-        onExploreCatalog={() => scrollToAnchor('collection')}
-        onStartStory={() => scrollToAnchor('cinematic-story')}
-        featuredProduct={livingProducts[0] || publishedProducts[0]}
+        onExploreCatalog={() => scrollToAnchor('catalog')}
+        onExploreBranches={() => scrollToAnchor('branches')}
+        featuredProduct={featuredProducts[0]}
         onOpenProductModal={openProductModal}
       />
 
-      {/* =========================================================================
-          CHAPTER B: SIGNATURE CINEMATIC SCROLL SEQUENCE (LIVING & DINING OVERLAP)
-          Sticky visual stage with native scroll progress & physical image boundaries
-          ========================================================================= */}
-      <CinematicStoryStage
-        products={publishedProducts}
-        onSelectCategory={(cat) => jumpToWorld(cat, 'collection')}
-        onOpenProductModal={openProductModal}
-        onNavigateToCatalog={() => scrollToAnchor('collection')}
-      />
-
-      {/* =========================================================================
-          CONTAINED CORE: CATALOGUE, WORKSPACES, BRANCHES & PHILOSOPHY
-          ========================================================================= */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-24 pt-16">
-
-      {/* WORLD 3: ARCHITECTURAL WORKSPACE (عالم المساحات المكتبية) */}
-      <section
-        id="world-office"
-        className="relative rounded-3xl overflow-hidden bg-[#1E1E1E] text-white p-8 sm:p-12 lg:p-16 border border-neutral-800 shadow-xl scroll-mt-24"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-          
-          {/* Visual Showcase */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="relative aspect-[16/10] w-full rounded-2xl overflow-hidden border border-neutral-700/80 shadow-2xl bg-neutral-900 group">
-              <img
-                src={
-                  officeProducts[0]?.coverImageUrl ||
-                  'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=1200&auto=format&fit=crop&q=80'
-                }
-                alt="مكتب معماري فاخر من خشب الدردار"
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-103"
-                loading="lazy"
-              />
-              <div className="absolute bottom-4 right-4 bg-[#1E1E1E]/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-neutral-700 text-xs">
-                <span className="text-[#FF551A] font-bold block text-[11px]">تنظيم هندسي متكامل</span>
-                <span className="text-white font-medium">قنوات تمديد خفية ولمسات نحاسية أنيقة</span>
-              </div>
-            </div>
-
-            {/* Live Office Highlights from Real Collection */}
-            {officeProducts.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
-                {officeProducts.slice(0, 2).map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => openProductModal(item)}
-                    className="flex items-center gap-3.5 p-3.5 rounded-xl bg-neutral-900/90 border border-neutral-800 hover:border-neutral-600 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-16 h-14 rounded-lg overflow-hidden bg-neutral-800 shrink-0 border border-neutral-700/60">
-                      <img
-                        src={item.coverImageUrl || item.images[0]?.url}
-                        alt={item.name}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-white group-hover:text-[#FF551A] transition-colors truncate">
-                        {item.name}
-                      </h4>
-                      <span className="text-xs font-bold text-neutral-300 tabular-nums block mt-1">
-                        {formatDZD(item.price)}
-                      </span>
-                    </div>
-                    <ChevronLeft className="w-4 h-4 text-neutral-500 group-hover:text-white transition-colors shrink-0" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Editorial Narrative */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A] block">
-                03 · مساحات العمل والمكاتب
-              </span>
-              <h2
-                className="text-2xl sm:text-4xl font-bold text-white leading-snug"
-                style={{ textWrap: 'balance' }}
-              >
-                بيئة عمل ملهمة بخطوط هندسية متوازنة
-              </h2>
-            </div>
-
-            <p className="text-sm text-neutral-300 leading-relaxed font-normal">
-              لأن الإنتاجية تنبع من هدوء المكان، ابتكرنا مكاتب عملية من خشب الدردار المصمت مزودة بقنوات خفية لتنظيم الأسلاك وأدراج سلسة الإغلاق تمنح مساحة عملك ترتيباً معمارياً راقياً.
-            </p>
-
-            <div className="pt-2 flex flex-wrap items-center gap-4">
-              <button
-                onClick={() => jumpToWorld('Office', 'collection')}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#FF551A] hover:bg-[#E04814] text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-              >
-                <span>استكشف أثاث المكاتب في الكتالوج</span>
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* =========================================================================
-          CHAPTER C & D: THE COMPLETE STORE CATALOGUE (الكتالوج الكامل المتكامل)
-          ========================================================================= */}
-      <section id="collection" className="space-y-8 scroll-mt-24 pt-4">
+      {/* Main Content Container */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-24 pt-16 sm:pt-20">
         
-        {/* Section Header & Search Controls */}
-        <div className="space-y-5">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 border-b border-neutral-200 pb-5">
+        {/* =========================================================================
+            ب) تصنيفات بصرية واضحة (VISUAL CATEGORIES)
+            ========================================================================= */}
+        <section id="categories" className="space-y-8 scroll-mt-24">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-neutral-200 pb-5">
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-2 mb-1">
                 <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
                 <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A]">
-                  كتالوج أثاث الثقة
+                  تشكيلات أثاث الثقة
                 </span>
               </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1E1E1E]">
-                المعروضات وقطع الأثاث
+              <h2 className="text-2xl sm:text-3xl font-bold text-[#1E1E1E]">
+                تصنيفات الأثاث حسب المساحة
               </h2>
             </div>
-
-            {/* Search Bar & Sorter */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* Search */}
-              <div className="relative min-w-[240px]">
-                <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ابحث بالاسم أو الخامة..."
-                  className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-neutral-200 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#FF551A] focus:border-transparent transition-all text-[#1E1E1E] shadow-2xs"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1 cursor-pointer"
-                    title="مسح البحث"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Sort By */}
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-neutral-500 shrink-0 hidden sm:block" />
-                <select
-                  value={sortBy}
-                  onChange={(e: any) => setSortBy(e.target.value)}
-                  className="px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs sm:text-sm bg-white text-neutral-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#FF551A] focus:border-transparent transition-all cursor-pointer shadow-2xs"
-                  aria-label="ترتيب المنتجات"
-                >
-                  <option value="default">الترتيب الافتراضي</option>
-                  <option value="newest">الأحدث إضافةً</option>
-                  <option value="price-asc">السعر: من الأقل للأعلى</option>
-                  <option value="price-desc">السعر: من الأعلى للأقل</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Interactive Category Tabs (Segmented Buttons) */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {ARABIC_CATEGORIES.map((cat) => {
-              const isActive = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => handleCategorySelect(cat.id)}
-                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer ${
-                    isActive
-                      ? 'bg-[#1E1E1E] text-white shadow-xs'
-                      : 'bg-white text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 border border-neutral-200'
-                  }`}
-                >
-                  {cat.nameAr}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active Filter Indicators & Count */}
-          <div className="flex items-center justify-between text-xs text-neutral-500 pt-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span>عرض <strong className="font-bold text-[#1E1E1E] tabular-nums">{filteredProducts.length}</strong> من أصل <strong className="font-bold text-[#1E1E1E] tabular-nums">{publishedProducts.length}</strong> قطعة أثاث</span>
-              {(selectedCategory !== 'All' || searchQuery.trim() !== '') && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <button
-                    onClick={resetFilters}
-                    className="inline-flex items-center gap-1 text-[#FF551A] hover:underline font-semibold cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>إلغاء التصفية</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* =========================================================================
-            PRODUCT CARDS GRID (ENHANCED MARGINS, RATIOS, SHADOWS & LUXURY TOUCHES)
-            ========================================================================= */}
-        {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {filteredProducts.map((product) => {
-              const coverImage = product.images.find((img) => img.isCover) || product.images[0];
-              const secondaryImage = product.images.length > 1 ? product.images.find((img) => !img.isCover) || product.images[1] : null;
-              const categoryAr = getCategoryArabicName(product.category);
-
-              return (
-                <article
-                  key={product.id}
-                  onClick={() => openProductModal(product)}
-                  className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/80 overflow-hidden luxury-card-shadow luxury-card-shadow-hover flex flex-col justify-between"
-                >
-                  {/* Image Container with Consistent 4:3 Aspect Ratio and Linen Surface */}
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
-                    {/* Primary Image */}
-                    <img
-                      src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
-                      alt={product.name}
-                      referrerPolicy="no-referrer"
-                      className={`w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                        secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-105'
-                      }`}
-                      loading="lazy"
-                    />
-
-                    {/* Secondary Image Reveal on Hover (Desktop Luxury Interaction) */}
-                    {secondaryImage && (
-                      <img
-                        src={secondaryImage.url}
-                        alt={`${product.name} - زاوية إضافية`}
-                        referrerPolicy="no-referrer"
-                        className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] scale-100 group-hover:scale-105"
-                        loading="lazy"
-                      />
-                    )}
-
-                    {/* Frosted Glass Category Tag on Top-Right */}
-                    <span className="absolute top-3.5 right-3.5 bg-white/92 backdrop-blur-md text-[#1E1E1E] text-[11px] font-bold px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 tracking-tight z-10">
-                      {categoryAr}
-                    </span>
-
-                    {/* Image Counter Badge on Bottom-Right */}
-                    {product.images.length > 1 && (
-                      <span className="absolute bottom-3.5 right-3.5 bg-[#1E1E1E]/80 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm z-10">
-                        <Layers className="w-3.5 h-3.5 text-neutral-300" />
-                        <span className="tabular-nums">{product.images.length} صور</span>
-                      </span>
-                    )}
-
-                    {/* Quick Preview Hover Overlay */}
-                    <div className="absolute inset-0 bg-[#1E1E1E]/15 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center p-4">
-                      <span className="bg-white/95 backdrop-blur-md text-[#1E1E1E] text-xs font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 border border-neutral-200/50">
-                        <Eye className="w-4 h-4 text-[#FF551A]" />
-                        <span>معاينة التفاصيل</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Card Content & Information with Harmonious Margins & Padding */}
-                  <div className="p-6 sm:p-7 flex-1 flex flex-col justify-between space-y-4">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors line-clamp-1 leading-snug">
-                        {product.name}
-                      </h3>
-
-                      <p className="text-xs sm:text-[13px] text-neutral-500 line-clamp-2 mt-2 leading-relaxed min-h-[2.5rem]">
-                        {product.description || 'قطعة أثاث عصرية مصنوعة بعناية فائقة وتصميم متناسق يلائم أرقى الديكورات.'}
-                      </p>
-                    </div>
-
-                    {/* Price and Details Action Footer */}
-                    <div className="pt-4 border-t border-neutral-100 flex items-center justify-between gap-3">
-                      <div>
-                        <span className="text-[11px] font-medium text-neutral-400 block">السعر المقدر</span>
-                        <span className="text-lg sm:text-xl font-bold text-[#1E1E1E] tabular-nums tracking-tight">
-                          {formatDZD(product.price)}
-                        </span>
-                      </div>
-
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-100/80 group-hover:bg-[#FF551A] text-neutral-700 group-hover:text-white text-xs font-bold transition-all duration-200 shadow-2xs">
-                        <span>التفاصيل</span>
-                        <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-                      </span>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-20 bg-white rounded-3xl border border-neutral-200 p-8 space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-neutral-100 text-neutral-400 flex items-center justify-center mx-auto">
-              <Search className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-base font-bold text-[#1E1E1E]">لم نجد أي قطعة أثاث تطابق بحثك</p>
-              <p className="text-xs text-neutral-500 max-w-md mx-auto">
-                جرب تغيير كلمات البحث أو اختيار تصنيف آخر من القائمة أعلاه لمعاينة بقية القطع المتوفرة.
-              </p>
-            </div>
             <button
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1E1E1E] text-white text-xs font-bold hover:bg-[#FF551A] transition-colors cursor-pointer"
+              type="button"
+              onClick={() => scrollToAnchor('catalog')}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-600 hover:text-[#FF551A] transition-colors cursor-pointer self-start sm:self-auto"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>إعادة عرض جميع القطع</span>
+              <span>مشاهدة الكتالوج كاملاً</span>
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {visualCategories.map((cat) => (
+              <div
+                key={cat.id}
+                onClick={() => selectCategoryAndScroll(cat.id)}
+                className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between"
+              >
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100">
+                  <img
+                    src={cat.image}
+                    alt={cat.nameAr}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors">
+                      {cat.nameAr}
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
+                      {cat.subtitle}
+                    </p>
+                  </div>
+                  <div className="pt-3 border-t border-neutral-100 flex items-center justify-between text-xs font-semibold text-neutral-700 group-hover:text-[#FF551A]">
+                    <span>تصفح القطع</span>
+                    <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* =========================================================================
+            ج) مجموعة محدودة من المنتجات المميزة (FEATURED COLLECTION)
+            ========================================================================= */}
+        {featuredProducts.length > 0 && (
+          <section id="featured" className="space-y-8 scroll-mt-24">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-neutral-200 pb-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A]">
+                    مختارات مميزة
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-[#1E1E1E]">
+                  قطع أثاث حصرية ومختارة
+                </h2>
+              </div>
+              <p className="text-xs sm:text-sm text-neutral-500 max-w-md">
+                نماذج مميزة تجمع بين التصميم الهندسي الدقيق والخامات الخشبية الطبيعية المعالجة.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredProducts.map((product) => {
+                const coverImage = product.images.find((img) => img.isCover) || product.images[0];
+                const secondaryImage =
+                  product.images.length > 1
+                    ? product.images.find((img) => !img.isCover) || product.images[1]
+                    : null;
+                const categoryAr = getCategoryArabicName(product.category);
+
+                return (
+                  <article
+                    key={product.id}
+                    onClick={() => openProductModal(product)}
+                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between"
+                  >
+                    {/* Consistent 4:3 Product Image */}
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
+                      <img
+                        src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
+                        alt={product.name}
+                        referrerPolicy="no-referrer"
+                        className={`w-full h-full object-cover transition-all duration-500 ${
+                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-104'
+                        }`}
+                        loading="lazy"
+                      />
+                      {secondaryImage && (
+                        <img
+                          src={secondaryImage.url}
+                          alt={`${product.name} - زاوية أخرى`}
+                          referrerPolicy="no-referrer"
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-104"
+                          loading="lazy"
+                        />
+                      )}
+                      
+                      {/* Quiet Category label */}
+                      <span className="absolute top-3 right-3 bg-white/90 backdrop-blur-xs text-[#1E1E1E] text-[11px] font-bold px-2.5 py-1 rounded-lg border border-neutral-200/70 shadow-2xs">
+                        {categoryAr}
+                      </span>
+
+                      {/* Image count */}
+                      {product.images.length > 1 && (
+                        <span className="absolute bottom-3 right-3 bg-[#1E1E1E]/80 backdrop-blur-xs text-white text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Layers className="w-3 h-3 text-neutral-300" />
+                          <span className="tabular-nums">{product.images.length}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div>
+                        <h3 className="text-base font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors truncate">
+                          {product.name}
+                        </h3>
+                        <p className="text-xs text-neutral-500 line-clamp-2 mt-1.5 leading-relaxed min-h-[2rem]">
+                          {product.description || 'قطعة أثاث عصرية مصنوعة بعناية فائقة وتصميم متناسق.'}
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] text-neutral-400 block font-medium">السعر</span>
+                          <span className="text-base sm:text-lg font-bold text-[#1E1E1E] tabular-nums">
+                            {formatDZD(product.price)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 rounded-lg bg-neutral-100 group-hover:bg-[#FF551A] text-neutral-700 group-hover:text-white text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>التفاصيل</span>
+                          <ChevronLeft className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         )}
-      </section>
 
-      {/* =========================================================================
-          CHAPTER E: THREE VERIFIED SHOWROOM BRANCHES & MAP EXPERIENCE
-          ========================================================================= */}
-      <BranchLocationsSection className="pt-4" />
+        {/* =========================================================================
+            د) الكتالوج الكامل (FULL CATALOG)
+            ========================================================================= */}
+        <section id="catalog" className="space-y-8 scroll-mt-24 pt-4">
+          
+          {/* Header & Filter Bar */}
+          <div className="space-y-5">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 border-b border-neutral-200 pb-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A]">
+                    كتالوج أثاث الثقة
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-[#1E1E1E]">
+                  جميع معروضات وقطع الأثاث
+                </h2>
+              </div>
 
-      {/* =========================================================================
-          CHAPTER F: MATERIALS & CRAFTSMANSHIP STORY (فلسفة الجودة والحرفة)
-          ========================================================================= */}
-      <section id="story" className="bg-white rounded-3xl border border-neutral-200/90 p-8 sm:p-12 space-y-6 luxury-card-shadow scroll-mt-24">
-        <div className="max-w-2xl space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A]">
-              فلسفة الحرفية
-            </span>
+              {/* Search & Sort Controls */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                {/* Search Input */}
+                <div className="relative min-w-[240px]">
+                  <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                  <input
+                    id="catalog-search-input"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث بالاسم، الخامة، أو النوع..."
+                    className="w-full pr-10 pl-8 py-2.5 rounded-xl border border-neutral-200 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#FF551A] focus:border-transparent transition-all text-[#1E1E1E]"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1 cursor-pointer"
+                      title="مسح البحث"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Sorter */}
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-neutral-500 shrink-0 hidden sm:block" />
+                  <select
+                    value={sortBy}
+                    onChange={(e: any) => setSortBy(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs sm:text-sm bg-white text-neutral-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#FF551A] focus:border-transparent transition-all cursor-pointer"
+                    aria-label="ترتيب المنتجات"
+                  >
+                    <option value="default">الترتيب الافتراضي</option>
+                    <option value="newest">الأحدث إضافةً</option>
+                    <option value="price-asc">السعر: من الأقل للأعلى</option>
+                    <option value="price-desc">السعر: من الأعلى للأقل</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Category Filter Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              {ARABIC_CATEGORIES.map((cat) => {
+                const isActive = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategorySelect(cat.id)}
+                    className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-[#1E1E1E] text-white shadow-xs'
+                        : 'bg-white text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 border border-neutral-200'
+                    }`}
+                  >
+                    {cat.nameAr}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Catalog Counter & Reset */}
+            <div className="flex items-center justify-between text-xs text-neutral-500 pt-1">
+              <div className="flex items-center gap-2">
+                <span>عرض {filteredProducts.length} من أصل {publishedProducts.length} قطعة أثاث</span>
+                {(selectedCategory !== 'All' || searchQuery.trim() !== '') && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      onClick={resetFilters}
+                      className="inline-flex items-center gap-1 text-[#FF551A] hover:underline font-semibold cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>إلغاء التصفية</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-[#1E1E1E]">
-            خامات طبيعية وصناعة تتقن أدق التفاصيل
-          </h2>
-          <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-            في «أثاث الثقة»، نؤمن بأن الأثاث ليس مجرد قطع وظيفية بل هو روح المكان. نحرص على اختيار أخشاب الزان والبلوط المجففة حرارياً، ونستخدم أقمشة مقاومة للبقع والبهتان مع حشوات إسفنجية عالية الكثافة تمنحك الراحة المطلقة وتدوم سنوات طويلة دون هبوط.
-          </p>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-neutral-100 text-xs">
-          <div className="space-y-1.5">
-            <h4 className="font-bold text-[#1E1E1E] text-sm">أخشاب مصمتة فاخرة</h4>
-            <p className="text-neutral-500 leading-relaxed">
-              هياكل داخلية وخارجية من خشب البلوط والزان المجفف لضمان المتانة ومقاومة الرطوبة والتمدد.
+          {/* Product Grid */}
+          {filteredProducts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {filteredProducts.map((product) => {
+                const coverImage = product.images.find((img) => img.isCover) || product.images[0];
+                const secondaryImage =
+                  product.images.length > 1
+                    ? product.images.find((img) => !img.isCover) || product.images[1]
+                    : null;
+                const categoryAr = getCategoryArabicName(product.category);
+
+                return (
+                  <article
+                    key={product.id}
+                    onClick={() => openProductModal(product)}
+                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between"
+                  >
+                    {/* Consistent 4:3 Image */}
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
+                      <img
+                        src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
+                        alt={product.name}
+                        referrerPolicy="no-referrer"
+                        className={`w-full h-full object-cover transition-all duration-500 ${
+                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-104'
+                        }`}
+                        loading="lazy"
+                      />
+                      {secondaryImage && (
+                        <img
+                          src={secondaryImage.url}
+                          alt={`${product.name} - صورة ثانوية`}
+                          referrerPolicy="no-referrer"
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-104"
+                          loading="lazy"
+                        />
+                      )}
+
+                      {/* Quiet Category Tag */}
+                      <span className="absolute top-3 right-3 bg-white/92 backdrop-blur-xs text-[#1E1E1E] text-[11px] font-bold px-2.5 py-1 rounded-lg border border-neutral-200/70 shadow-2xs">
+                        {categoryAr}
+                      </span>
+
+                      {/* Image count */}
+                      {product.images.length > 1 && (
+                        <span className="absolute bottom-3 right-3 bg-[#1E1E1E]/80 backdrop-blur-xs text-white text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Layers className="w-3 h-3 text-neutral-300" />
+                          <span className="tabular-nums">{product.images.length} صور</span>
+                        </span>
+                      )}
+
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-[#1E1E1E]/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="bg-white/95 text-[#1E1E1E] text-xs font-bold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-1.5">
+                          <Eye className="w-4 h-4 text-[#FF551A]" />
+                          <span>معاينة التفاصيل</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                      <div>
+                        <h3 className="text-base sm:text-lg font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors truncate">
+                          {product.name}
+                        </h3>
+                        <p className="text-xs text-neutral-500 line-clamp-2 mt-2 leading-relaxed min-h-[2.2rem]">
+                          {product.description || 'قطعة أثاث عصرية مصنوعة بعناية فائقة وتصميم متناسق يلائم أرقى الديكورات.'}
+                        </p>
+                      </div>
+
+                      {/* Price & Action */}
+                      <div className="pt-4 border-t border-neutral-100 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] text-neutral-400 block font-medium">السعر الرسمي</span>
+                          <span className="text-lg font-bold text-[#1E1E1E] tabular-nums">
+                            {formatDZD(product.price)}
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-100 group-hover:bg-[#FF551A] text-neutral-700 group-hover:text-white text-xs font-bold transition-colors">
+                          <span>عرض التفاصيل</span>
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-16 bg-white rounded-2xl border border-neutral-200 p-8 space-y-4">
+              <div className="w-12 h-12 rounded-xl bg-neutral-100 text-neutral-400 flex items-center justify-center mx-auto">
+                <Search className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-base font-bold text-[#1E1E1E]">لم نجد أي قطعة أثاث تطابق بحثك</p>
+                <p className="text-xs text-neutral-500 max-w-md mx-auto">
+                  يمكنكم تجربة كلمات بحث أخرى أو اختيار تصنيف من الأعلى لمعاينة القطع المتاحة.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1E1E1E] text-white text-xs font-bold hover:bg-[#FF551A] transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>إعادة عرض جميع القطع</span>
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* =========================================================================
+            هـ) فروع أثاث الثقة الثلاثة (THREE BRANCHES & MAP)
+            ========================================================================= */}
+        <BranchLocationsSection />
+
+        {/* =========================================================================
+            و) الخامات والخدمات والضمانات المؤكدة فعلياً (MATERIALS & GUARANTEES)
+            ========================================================================= */}
+        <section id="guarantees" className="bg-white rounded-3xl border border-neutral-200/90 p-8 sm:p-12 space-y-8 shadow-xs scroll-mt-24">
+          <div className="max-w-2xl space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A]">
+                معايير الثقة
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#1E1E1E]">
+              خامات أصيلة وضمانات مؤكدة
+            </h2>
+            <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
+              نلتزم في أثاث الثقة بأعلى معايير الحرفية والمتانة لتصلكم قطع تدوم لسنوات طويلة دون هبوط أو تلف.
             </p>
           </div>
-          <div className="space-y-1.5">
-            <h4 className="font-bold text-[#1E1E1E] text-sm">أنسجة مختارة بعناية</h4>
-            <p className="text-neutral-500 leading-relaxed">
-              أقمشة بوكليه ومخمل وكتان معالجة ضد امتصاص السوائل وسهلة التنظيف والعناية اليومية.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <h4 className="font-bold text-[#1E1E1E] text-sm">خدمة ما بعد البيع</h4>
-            <p className="text-neutral-500 leading-relaxed">
-              فريق دعم فني متكامل للمتابعة والتركيب مع ضمان على جودة الهيكل والتماسك الخشبي.
-            </p>
-          </div>
-        </div>
-      </section>
 
-      {/* End Contained Core Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 border-t border-neutral-100">
+            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
+              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
+                <Award className="w-5 h-5" />
+              </div>
+              <h4 className="font-bold text-[#1E1E1E] text-sm">أخشاب طبيعية مصمتة</h4>
+              <p className="text-neutral-500 text-xs leading-relaxed">
+                هياكل صلبة من خشب الزان والبلوط المجفف حرارياً لمقاومة الرطوبة والتمدد مع مرور الزمن.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
+              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <h4 className="font-bold text-[#1E1E1E] text-sm">أقمشة فاخرة وسهلة العناية</h4>
+              <p className="text-neutral-500 text-xs leading-relaxed">
+                أنسجة بوكليه وكتان ومخمل راقية معالجة لمقاومة امتصاص السوائل وسهولة التنظيف اليومي.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
+              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
+                <Truck className="w-5 h-5" />
+              </div>
+              <h4 className="font-bold text-[#1E1E1E] text-sm">توصيل مع التركيب المحترف</h4>
+              <p className="text-neutral-500 text-xs leading-relaxed">
+                شحن آمن إلى جميع ولايات الجزائر، مع فريق تركيب متخصص لتسليم الأثاث في أفضل حلة.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
+              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <h4 className="font-bold text-[#1E1E1E] text-sm">ضمان ومتابعة ما بعد البيع</h4>
+              <p className="text-neutral-500 text-xs leading-relaxed">
+                ضمان معتمد على متانة الهيكل الداخلي وثبات الإسفنج عالي الكثافة، مع متابعة دورية مستمرة.
+              </p>
+            </div>
+          </div>
+        </section>
+
       </div>
 
       {/* =========================================================================
-          PRODUCT DETAILS MODAL (RESPONSIVE GALLERY & SPECS)
+          PRODUCT DETAILS MODAL (RESPONSIVE GALLERY & INQUIRY)
           ========================================================================= */}
       {activeProduct && (
         <div
@@ -737,7 +717,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                             e.stopPropagation();
                             setActiveImageIndex((prev) => (prev < activeProduct.images.length - 1 ? prev + 1 : 0));
                           }}
-                          className="pointer-events-auto p-1.5 rounded-full bg-white/80 hover:bg-white text-neutral-800 shadow-md transition-colors cursor-pointer"
+                          className="pointer-events-auto p-1.5 rounded-full bg-white/85 hover:bg-white text-neutral-800 shadow-md transition-colors cursor-pointer"
                           aria-label="الصورة السابقة"
                         >
                           <ChevronRight className="w-4 h-4" />
@@ -748,7 +728,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                             e.stopPropagation();
                             setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeProduct.images.length - 1));
                           }}
-                          className="pointer-events-auto p-1.5 rounded-full bg-white/80 hover:bg-white text-neutral-800 shadow-md transition-colors cursor-pointer"
+                          className="pointer-events-auto p-1.5 rounded-full bg-white/85 hover:bg-white text-neutral-800 shadow-md transition-colors cursor-pointer"
                           aria-label="الصورة التالية"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -783,11 +763,11 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                   )}
                 </div>
 
-                {/* Storage & Delivery Highlights */}
+                {/* Guarantees Note */}
                 <div className="mt-6 pt-5 border-t border-neutral-200 text-xs text-neutral-600 space-y-2">
                   <div className="flex items-center gap-2">
                     <Truck className="w-4 h-4 text-[#FF551A] shrink-0" />
-                    <span>توصيل مع التركيب المحترف متوفر لجميع الولايات</span>
+                    <span>توصيل مع التركيب متوفر لجميع الولايات</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-[#FF551A] shrink-0" />
@@ -808,7 +788,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                   </h2>
 
                   <div className="mt-4 pt-4 border-t border-neutral-100">
-                    <span className="text-xs text-neutral-400 block">السعر المقدر</span>
+                    <span className="text-xs text-neutral-400 block">السعر الرسمي</span>
                     <div className="text-2xl sm:text-3xl font-bold text-[#1E1E1E] tabular-nums">
                       {formatDZD(activeProduct.price)}
                     </div>
@@ -849,10 +829,15 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                   </a>
 
                   <button
-                    onClick={closeProductModal}
-                    className="w-full py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      closeProductModal();
+                      scrollToAnchor('branches');
+                    }}
+                    className="flex items-center justify-center gap-2 w-full py-3 bg-neutral-100 hover:bg-neutral-200 text-[#1E1E1E] font-bold text-xs rounded-xl transition-colors"
                   >
-                    إغلاق المعاينة والعودة للكتالوج
+                    <MapPin className="w-4 h-4 text-[#FF551A]" />
+                    <span>معرفة موقع المعرض للمعاينة</span>
                   </button>
                 </div>
 

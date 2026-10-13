@@ -285,23 +285,36 @@ export default function App() {
                 </ul>
               </div>
 
-              {/* Guarantees */}
+              {/* Quick Navigation Links */}
               <div className="space-y-3">
                 <span className="text-xs font-bold text-neutral-300 uppercase tracking-wider block">
-                  ضمانات أثاث الثقة
+                  روابط سريعة
                 </span>
-                <ul className="space-y-2 text-neutral-400 text-xs">
-                  <li className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-[#FF551A] shrink-0" />
-                    <span>خامات أخشاب صلبة وأقمشة أصلية</span>
+                <ul className="space-y-2 text-neutral-400 text-xs font-medium">
+                  <li>
+                    <a href="#categories" className="hover:text-[#FF551A] transition-colors block">
+                      تشكيلة الأثاث والتصنيفات
+                    </a>
                   </li>
-                  <li className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-[#FF551A] shrink-0" />
-                    <span>توصيل مع التركيب لجميع الولايات</span>
+                  <li>
+                    <a href="#featured" className="hover:text-[#FF551A] transition-colors block">
+                      القطع المميزة والمختارة
+                    </a>
                   </li>
-                  <li className="flex items-center gap-2">
-                    <PhoneCall className="w-4 h-4 text-[#FF551A] shrink-0" />
-                    <span>خدمة عملاء ومتابعة بعد البيع</span>
+                  <li>
+                    <a href="#catalog" className="hover:text-[#FF551A] transition-colors block">
+                      الكتالوج الكامل المتكامل
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#branches" className="hover:text-[#FF551A] transition-colors block">
+                      معارضنا في الجزائر
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#guarantees" className="hover:text-[#FF551A] transition-colors block">
+                      الخامات والضمانات
+                    </a>
                   </li>
                 </ul>
               </div>

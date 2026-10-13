@@ -164,7 +164,7 @@ export const STORE_BRANCHES: StoreBranch[] = [
 ];
 
 export function formatDZD(amount: number): string {
-  if (typeof amount !== 'number' || isNaN(amount)) return '0 د.ج';
+  if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) return 'السعر عند الاستفسار';
   return new Intl.NumberFormat('fr-FR').format(amount) + ' د.ج';
 }
 
