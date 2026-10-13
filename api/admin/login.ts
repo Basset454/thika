@@ -1,4 +1,4 @@
-import { isAuthConfigured, verifyAdminPassword, createSessionToken } from './auth-utils.js';
+import { isAuthConfigured, verifyAdminPassword, createSessionToken } from './_auth-utils.js';
 
 export default async function handler(req: any, res: any) {
   if (res?.setHeader) {

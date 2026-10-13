@@ -1,4 +1,4 @@
-import { checkAdminAuth } from './auth-utils.js';
+import { checkAdminAuth } from './_auth-utils.js';
 
 export default async function handler(req: any, res: any) {
   if (res?.setHeader) {

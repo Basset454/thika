@@ -4,6 +4,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/blob-status",
+      "destination": "/api/blob/status"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

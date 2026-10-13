@@ -1,5 +1,5 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import { checkAdminAuth } from './admin/auth-utils.js';
+import { checkAdminAuth } from './admin/_auth-utils.js';
 
 function sanitizeBlobToken(rawToken?: string): string | undefined {
   if (!rawToken || typeof rawToken !== 'string') return undefined;

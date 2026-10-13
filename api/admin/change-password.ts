@@ -1,5 +1,5 @@
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
-import { checkAdminAuth, setCustomAdminPassword, verifyAdminPassword } from './auth-utils.js';
+import { checkAdminAuth, setCustomAdminPassword, verifyAdminPassword } from './_auth-utils.js';
 
 export default async function changePasswordHandler(req: any, res: any) {
   if (res?.setHeader) {

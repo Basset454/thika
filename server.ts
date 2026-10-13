@@ -7,29 +7,19 @@ import productsHandler from './api/products';
 import uploadHandler from './api/upload';
 import blobUploadHandler from './api/blob-upload';
 import deleteImageHandler from './api/delete-image';
-import blobStatusHandler from './api/blob-status';
-import dbStatusHandler from './api/db-status';
+import blobStatusHandler from './api/blob/status.js';
 import loginHandler from './api/admin/login';
 import verifyHandler from './api/admin/verify';
 import logoutHandler from './api/admin/logout';
-import changePasswordHandler from './api/admin/change-password';
 
 dotenv.config();
 
-// Recover Postgres connection string if mistakenly set in BLOB_READ_WRITE_TOKEN
+// Neutralize any Postgres connection strings mistakenly set in BLOB_READ_WRITE_TOKEN
 if (
   process.env.BLOB_READ_WRITE_TOKEN &&
   (process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgres://') ||
-    process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgresql://'))
-) {
-  if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = process.env.BLOB_READ_WRITE_TOKEN;
-    console.log('Transferred PostgreSQL URL from BLOB_READ_WRITE_TOKEN to DATABASE_URL');
-  }
-  delete process.env.BLOB_READ_WRITE_TOKEN;
-} else if (
-  process.env.BLOB_READ_WRITE_TOKEN &&
-  !process.env.BLOB_READ_WRITE_TOKEN.startsWith('vercel_blob_rw_')
+    process.env.BLOB_READ_WRITE_TOKEN.startsWith('postgresql://') ||
+    !process.env.BLOB_READ_WRITE_TOKEN.startsWith('vercel_blob_rw_'))
 ) {
   delete process.env.BLOB_READ_WRITE_TOKEN;
 }
@@ -69,27 +59,16 @@ app.all('/api/admin/logout', (req: Request, res: Response) => {
   return logoutHandler(req, res);
 });
 
-app.all('/api/admin/change-password', (req: Request, res: Response) => {
-  return changePasswordHandler(req, res);
-});
-
 // -------------------------------------------------------------
-// 2. API: Storage & Database Status (Vercel Blob & Neon PostgreSQL)
+// 2. API: Vercel Blob Status
 // -------------------------------------------------------------
 app.all(['/api/blob/status', '/api/blob-status'], (req: Request, res: Response) => {
   return blobStatusHandler(req, res);
 });
 
-app.all(['/api/db/status', '/api/db-status', '/api/neon/status'], (req: Request, res: Response) => {
-  return dbStatusHandler(req, res);
-});
-
 // -------------------------------------------------------------
-// 3. API: Products APIs (Authoritative: Neon PostgreSQL, with resilient fallback)
+// 3. API: Products APIs (Authoritative: Vercel Blob _database/products.json)
 // -------------------------------------------------------------
-app.all('/api/products/reset', (req: Request, res: Response) => {
-  return productsHandler(req, res);
-});
 app.all('/api/products', (req: Request, res: Response) => {
   return productsHandler(req, res);
 });
