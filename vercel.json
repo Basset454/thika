@@ -4,16 +4,8 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/blob-status",
-      "destination": "/api/blob/status"
-    },
-    {
-      "source": "/api/products/reset",
-      "destination": "/api/products?action=reset"
-    },
-    {
       "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "destination": "/api/index?path=$1"
     },
     {
       "source": "/(.*)",

@@ -129,6 +129,10 @@ app.all('/api/delete-image', (req: Request, res: Response) => {
   return deleteImageHandler(req, res);
 });
 
+app.all('/api/*', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'API Endpoint Not Found' });
+});
+
 // -------------------------------------------------------------
 // Vite Server Integration (SPA dev & prod)
 // -------------------------------------------------------------
