@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Lock, ArrowLeft, ShieldCheck, AlertCircle, Loader2, Eye, EyeOff, Armchair } from 'lucide-react';
+import { Lock, ArrowLeft, ShieldCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { adminLogin } from '../services/api';
+import { LogoMark } from './LogoMark';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -39,8 +40,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
         
         {/* Brand Header */}
         <div className="text-center space-y-3">
-          <div className="w-14 h-14 bg-[#1E1E1E] text-white rounded-2xl flex items-center justify-center mx-auto shadow-md">
-            <Armchair className="w-7 h-7 text-[#FF551A]" />
+          <div className="w-16 h-16 bg-neutral-900/5 p-2 rounded-2xl flex items-center justify-center mx-auto shadow-sm border border-neutral-200/60">
+            <LogoMark className="w-full h-full" />
           </div>
           <div className="space-y-1">
             <h1 className="text-2xl font-bold text-[#1E1E1E]">

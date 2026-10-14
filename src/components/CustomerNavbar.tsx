@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Armchair, Menu, X, Search, MapPin, ChevronDown } from 'lucide-react';
+import { Menu, X, Search, MapPin, ChevronDown } from 'lucide-react';
+import { LogoMark } from './LogoMark';
 
 interface CustomerNavbarProps {
   onCategorySelect?: (cat: string) => void;
@@ -75,8 +76,8 @@ export const CustomerNavbar: React.FC<CustomerNavbarProps> = ({
             className="flex items-center gap-3 shrink-0 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF551A] rounded-xl"
             aria-label="أثاث الثقة - الصفحة الرئيسية"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#1E1E1E] text-white flex items-center justify-center shadow-sm group-hover:bg-[#FF551A] transition-colors duration-200">
-              <Armchair className="w-5 h-5 sm:w-6 sm:h-6 stroke-[1.8]" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-neutral-900/5 p-1.5 flex items-center justify-center shadow-xs group-hover:bg-[#FF551A]/10 transition-colors duration-200 border border-neutral-200/60">
+              <LogoMark className="w-full h-full" />
             </div>
             <div className="flex flex-col">
               <span className="text-lg sm:text-xl font-bold tracking-tight text-[#1E1E1E] leading-tight group-hover:text-[#FF551A] transition-colors">

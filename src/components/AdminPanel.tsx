@@ -25,7 +25,8 @@ import {
   Tag,
   Sliders,
   DollarSign,
-  Percent
+  Percent,
+  ShieldCheck
 } from 'lucide-react';
 import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings, TrustStandardsSection } from '../types';
 import { AdminProductForm } from './AdminProductForm';
