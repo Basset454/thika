@@ -30,6 +30,8 @@ import {
   Film
 } from 'lucide-react';
 
+import { getEffectiveCategoryImage, getDefaultCategoryImage } from '../utils/categoryDefaults';
+
 interface CustomerStoreProps {
   products: Product[];
   selectedCategory?: string;
@@ -236,13 +238,12 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
               p.category === cat.nameAr ||
               (cat.nameEn && p.category.toLowerCase() === cat.nameEn.toLowerCase())
           );
+          const effectiveImg = getEffectiveCategoryImage(cat);
           return {
             id: cat.id,
             nameAr: cat.nameAr,
             subtitle: cat.description || `تشكيلة ${cat.nameAr} الحصرية والمصنوعة بعناية`,
-            image:
-              matchingProduct?.coverImageUrl ||
-              'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&auto=format&fit=crop&q=80',
+            image: effectiveImg || matchingProduct?.coverImageUrl || getDefaultCategoryImage(cat.id),
           };
         });
       }
@@ -255,7 +256,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         subtitle: 'أطقم صالونات وأرائك وثير بتنجيد فاخر',
         image:
           publishedProducts.find((p) => (p.category || '').toLowerCase().includes('living'))?.coverImageUrl ||
-          'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&auto=format&fit=crop&q=80',
+          getDefaultCategoryImage('Living Room'),
       },
       {
         id: 'Dining Room',
@@ -263,7 +264,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         subtitle: 'طاولات خشب زان وبلوط صلب مع كراسي مكسوة',
         image:
           publishedProducts.find((p) => (p.category || '').toLowerCase().includes('dining'))?.coverImageUrl ||
-          'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=900&auto=format&fit=crop&q=80',
+          getDefaultCategoryImage('Dining Room'),
       },
       {
         id: 'Bedroom',
@@ -271,7 +272,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         subtitle: 'أسرّة منجدة وخزائن مدمجة بلمسات هادئة',
         image:
           publishedProducts.find((p) => (p.category || '').toLowerCase().includes('bed'))?.coverImageUrl ||
-          'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=900&auto=format&fit=crop&q=80',
+          getDefaultCategoryImage('Bedroom'),
       },
       {
         id: 'Office',
@@ -279,7 +280,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         subtitle: 'مساحات عمل مريحة وإكسسوارات ديكور راقية',
         image:
           publishedProducts.find((p) => (p.category || '').toLowerCase().includes('office'))?.coverImageUrl ||
-          'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=900&auto=format&fit=crop&q=80',
+          getDefaultCategoryImage('Office'),
       },
     ];
   }, [dynamicCategories, publishedProducts]);
@@ -358,6 +359,9 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                     loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = getDefaultCategoryImage(cat.id);
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>

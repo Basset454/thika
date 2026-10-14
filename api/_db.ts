@@ -8,6 +8,7 @@ export interface CategoryRecord {
   order: number;
   isHidden: boolean;
   description?: string;
+  imageUrl?: string;
   productCount?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -28,11 +29,11 @@ export interface StoreSettingsRecord {
 }
 
 export const INITIAL_CATEGORIES: CategoryRecord[] = [
-  { id: 'Living Room', nameAr: 'صالونات وغرف معيشة', nameEn: 'Living Room', order: 1, isHidden: false, description: 'أرائك عصرية، صالونات زاوية فاخرة، وأطقم جلوس مريحة.' },
-  { id: 'Dining Room', nameAr: 'غرف طعام وطاولات', nameEn: 'Dining Room', order: 2, isHidden: false, description: 'طاولات خشب طبيعي مصمت وكراسي سفرة متناسقة وأنيقة.' },
-  { id: 'Bedroom', nameAr: 'غرف نوم وأسرّة', nameEn: 'Bedroom', order: 3, isHidden: false, description: 'أسرّة ملكية، طاولات سرير جانبية، وخزائن ملابس راقية.' },
-  { id: 'Office', nameAr: 'مكاتب ومساحات عمل', nameEn: 'Office', order: 4, isHidden: false, description: 'مكاتب خشبية مريحة وخزائن ملفات هندسية متطورة.' },
-  { id: 'Lighting', nameAr: 'إضاءة وديكور راقٍ', nameEn: 'Lighting', order: 5, isHidden: false, description: 'عناصر إضاءة وديكورات مكملة للأثاث.' },
+  { id: 'Living Room', nameAr: 'صالونات وغرف معيشة', nameEn: 'Living Room', order: 1, isHidden: false, description: 'أرائك عصرية، صالونات زاوية فاخرة، وأطقم جلوس مريحة.', imageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1200&auto=format&fit=crop&q=85' },
+  { id: 'Dining Room', nameAr: 'غرف طعام وطاولات', nameEn: 'Dining Room', order: 2, isHidden: false, description: 'طاولات خشب طبيعي مصمت وكراسي سفرة متناسقة وأنيقة.', imageUrl: 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=1200&auto=format&fit=crop&q=85' },
+  { id: 'Bedroom', nameAr: 'غرف نوم وأسرّة', nameEn: 'Bedroom', order: 3, isHidden: false, description: 'أسرّة ملكية، طاولات سرير جانبية، وخزائن ملابس راقية.', imageUrl: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=1200&auto=format&fit=crop&q=85' },
+  { id: 'Office', nameAr: 'مكاتب ومساحات عمل', nameEn: 'Office', order: 4, isHidden: false, description: 'مكاتب خشبية مريحة وخزائن ملفات هندسية متطورة.', imageUrl: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=1200&auto=format&fit=crop&q=85' },
+  { id: 'Lighting', nameAr: 'إضاءة وديكور راقٍ', nameEn: 'Lighting', order: 5, isHidden: false, description: 'عناصر إضاءة وديكورات مكملة للأثاث.', imageUrl: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=1200&auto=format&fit=crop&q=85' },
 ];
 
 export const DEFAULT_STORE_SETTINGS: StoreSettingsRecord = {
@@ -496,17 +497,21 @@ export async function ensureCategoriesTable(): Promise<boolean> {
         display_order INT NOT NULL DEFAULT 0,
         is_hidden BOOLEAN NOT NULL DEFAULT false,
         description TEXT,
+        image_url TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `;
 
+    // Ensure image_url column exists if table was created previously
+    await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS image_url TEXT;`;
+
     const countRes = await sql`SELECT COUNT(*)::int as total FROM categories;`;
     if ((countRes[0]?.total || 0) === 0) {
       for (const cat of INITIAL_CATEGORIES) {
         await sql`
-          INSERT INTO categories (id, name_ar, name_en, display_order, is_hidden, description)
-          VALUES (${cat.id}, ${cat.nameAr}, ${cat.nameEn}, ${cat.order}, ${cat.isHidden}, ${cat.description || ''})
+          INSERT INTO categories (id, name_ar, name_en, display_order, is_hidden, description, image_url)
+          VALUES (${cat.id}, ${cat.nameAr}, ${cat.nameEn}, ${cat.order}, ${cat.isHidden}, ${cat.description || ''}, ${cat.imageUrl || null})
           ON CONFLICT (id) DO NOTHING;
         `;
       }
@@ -549,6 +554,7 @@ export async function getAllCategoriesFromDb(includeHidden = false): Promise<Cat
     order: Number(r.display_order) || 0,
     isHidden: Boolean(r.is_hidden),
     description: r.description || undefined,
+    imageUrl: r.image_url || undefined,
     productCount: Number(r.product_count) || 0,
     createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
     updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
@@ -570,14 +576,15 @@ export async function createCategoryInDb(cat: CategoryRecord): Promise<CategoryR
   const sql = getNeonSql();
   const now = new Date().toISOString();
   await sql`
-    INSERT INTO categories (id, name_ar, name_en, display_order, is_hidden, description, created_at, updated_at)
-    VALUES (${cat.id}, ${cat.nameAr}, ${cat.nameEn}, ${cat.order || 0}, ${Boolean(cat.isHidden)}, ${cat.description || ''}, ${now}, ${now})
+    INSERT INTO categories (id, name_ar, name_en, display_order, is_hidden, description, image_url, created_at, updated_at)
+    VALUES (${cat.id}, ${cat.nameAr}, ${cat.nameEn}, ${cat.order || 0}, ${Boolean(cat.isHidden)}, ${cat.description || ''}, ${cat.imageUrl || null}, ${now}, ${now})
     ON CONFLICT (id) DO UPDATE SET
       name_ar = EXCLUDED.name_ar,
       name_en = EXCLUDED.name_en,
       display_order = EXCLUDED.display_order,
       is_hidden = EXCLUDED.is_hidden,
       description = EXCLUDED.description,
+      image_url = EXCLUDED.image_url,
       updated_at = NOW();
   `;
   return { ...cat, updatedAt: now };
@@ -595,11 +602,12 @@ export async function updateCategoryInDb(id: string, updates: Partial<CategoryRe
   const order = updates.order !== undefined ? updates.order : current.display_order;
   const isHidden = updates.isHidden !== undefined ? updates.isHidden : current.is_hidden;
   const description = updates.description !== undefined ? updates.description : current.description;
+  const imageUrl = updates.imageUrl !== undefined ? (updates.imageUrl || null) : current.image_url;
   const now = new Date().toISOString();
 
   await sql`
     UPDATE categories
-    SET name_ar = ${nameAr}, name_en = ${nameEn}, display_order = ${order}, is_hidden = ${isHidden}, description = ${description}, updated_at = ${now}
+    SET name_ar = ${nameAr}, name_en = ${nameEn}, display_order = ${order}, is_hidden = ${isHidden}, description = ${description}, image_url = ${imageUrl}, updated_at = ${now}
     WHERE id = ${id};
   `;
 
@@ -610,6 +618,7 @@ export async function updateCategoryInDb(id: string, updates: Partial<CategoryRe
     order,
     isHidden,
     description,
+    imageUrl: imageUrl || undefined,
     updatedAt: now,
   };
 }

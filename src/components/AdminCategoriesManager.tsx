@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Category, Product } from '../types';
-import { getCategories, createCategory, updateCategory, deleteCategory } from '../services/api';
+import { getCategories, createCategory, updateCategory, deleteCategory, uploadImageFiles } from '../services/api';
+import { getEffectiveCategoryImage, getDefaultCategoryImage } from '../utils/categoryDefaults';
 import { 
   Layers, 
   Plus, 
@@ -15,7 +16,10 @@ import {
   Boxes,
   X,
   Save,
-  RotateCcw
+  RotateCcw,
+  Image as ImageIcon,
+  Upload,
+  Sparkles
 } from 'lucide-react';
 
 interface AdminCategoriesManagerProps {
@@ -40,6 +44,9 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
   const [formDescription, setFormDescription] = useState('');
   const [formOrder, setFormOrder] = useState<number>(1);
   const [formIsHidden, setFormIsHidden] = useState(false);
+  const [formImageUrl, setFormImageUrl] = useState<string>('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -83,6 +90,8 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
     setFormDescription('');
     setFormOrder(categories.length + 1);
     setFormIsHidden(false);
+    setFormImageUrl('');
+    setImageUploadError(null);
     setFormError(null);
     setIsCreatingNew(true);
   };
@@ -95,6 +104,8 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
     setFormDescription(category.description || '');
     setFormOrder(category.order || 1);
     setFormIsHidden(Boolean(category.isHidden));
+    setFormImageUrl(category.imageUrl || '');
+    setImageUploadError(null);
     setFormError(null);
   };
 
@@ -102,6 +113,44 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
     setIsCreatingNew(false);
     setEditingCategory(null);
     setFormError(null);
+    setImageUploadError(null);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('يرجى اختيار ملف صورة صالح (PNG, JPG, WebP).');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setImageUploadError(null);
+
+    try {
+      const uploaded = await uploadImageFiles([file]);
+      if (uploaded && uploaded.length > 0 && uploaded[0].url) {
+        setFormImageUrl(uploaded[0].url);
+        showToast('تم رفع الصورة المخصصة بنجاح إلى تخزين العقد.');
+      } else {
+        throw new Error('لم يتم استلام رابط الصورة المرفوعة.');
+      }
+    } catch (err: any) {
+      console.error('Category image upload error:', err);
+      setImageUploadError(err.message || 'حدث خطأ أثناء رفع الصورة. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsUploadingImage(false);
+      // Reset input value so same file can be re-selected if needed
+      e.target.value = '';
+    }
+  };
+
+  const handleRestoreDefaultImage = () => {
+    setFormImageUrl('');
+    setImageUploadError(null);
+    showToast('تمت استعادة الصورة الافتراضية الاحترافية للتصنيف.');
   };
 
   const handleSubmitForm = async (e: React.FormEvent) => {
@@ -125,6 +174,7 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
           order: Number(formOrder) || 99,
           isHidden: formIsHidden,
           description: formDescription.trim(),
+          imageUrl: formImageUrl.trim() || undefined,
         });
         showToast(`تم إنشاء تصنيف "${cleanAr}" بنجاح في قاعدة البيانات.`);
       } else if (editingCategory) {
@@ -134,6 +184,7 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
           order: Number(formOrder) || editingCategory.order,
           isHidden: formIsHidden,
           description: formDescription.trim(),
+          imageUrl: formImageUrl.trim() || undefined,
         });
         showToast(`تم تحديث تصنيف "${cleanAr}" بنجاح.`);
       }
@@ -219,7 +270,7 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
             تصنيفات معروضات الأثاث
           </h2>
           <p className="text-xs text-neutral-500 mt-1 max-w-xl">
-            يمكنك إنشاء تصنيفات جديدة، تعديل أسمائها وترتيب ظهورها، أو إخفائها مؤقتاً. النظام يمنع حذف أي تصنيف يحتوي على منتجات نشطة لحماية سلامة البيانات.
+            يمكنك تخصيص صور التصنيفات، تعديل أسمائها وترتيب ظهورها، أو إخفائها مؤقتاً. عند تشغيل المتجر تظهر صور احترافية افتراضياً، ويمكنك رفع صورك الخاصة وتخصيصها في أي وقت.
           </p>
         </div>
 
@@ -256,9 +307,10 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
               <thead className="bg-[#F8F8F7] text-neutral-600 text-xs uppercase border-b border-neutral-200">
                 <tr>
                   <th className="py-3.5 px-6 font-bold w-16">الترتيب</th>
+                  <th className="py-3.5 px-6 font-bold w-20">الصورة</th>
                   <th className="py-3.5 px-6 font-bold">اسم التصنيف (بالعربية)</th>
-                  <th className="py-3.5 px-6 font-bold">المعرف / بالإنجليزية</th>
-                  <th className="py-3.5 px-6 font-bold">قطع الأثاث المرتبطة</th>
+                  <th className="py-3.5 px-6 font-bold">مصدر الصورة</th>
+                  <th className="py-3.5 px-6 font-bold">قطع الأثاث</th>
                   <th className="py-3.5 px-6 font-bold">الحالة بالمتجر</th>
                   <th className="py-3.5 px-6 font-bold text-left">إجراءات</th>
                 </tr>
@@ -268,6 +320,9 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                   .sort((a, b) => (a.order || 0) - (b.order || 0))
                   .map((cat, index) => {
                     const count = getCategoryProductCount(cat);
+                    const effectiveImg = getEffectiveCategoryImage(cat);
+                    const hasCustomImg = Boolean(cat.imageUrl && cat.imageUrl.trim().length > 0);
+
                     return (
                       <tr key={cat.id} className="hover:bg-neutral-50/70 transition-colors">
                         
@@ -298,9 +353,26 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                           </div>
                         </td>
 
+                        {/* Thumbnail Image */}
+                        <td className="py-3.5 px-6">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 shrink-0">
+                            <img
+                              src={effectiveImg}
+                              alt={cat.nameAr}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = getDefaultCategoryImage(cat.id);
+                              }}
+                            />
+                          </div>
+                        </td>
+
                         {/* Arabic Name */}
                         <td className="py-3.5 px-6 font-bold text-[#1E1E1E]">
-                          <span>{cat.nameAr}</span>
+                          <div className="flex items-center gap-2">
+                            <span>{cat.nameAr}</span>
+                            <span className="text-[10px] font-mono text-neutral-400">({cat.nameEn || cat.id})</span>
+                          </div>
                           {cat.description && (
                             <span className="block text-[11px] font-normal text-neutral-500 line-clamp-1 mt-0.5">
                               {cat.description}
@@ -308,9 +380,18 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                           )}
                         </td>
 
-                        {/* English Name / ID */}
-                        <td className="py-3.5 px-6 font-mono text-xs text-neutral-600">
-                          {cat.nameEn || cat.id}
+                        {/* Image Source Badge */}
+                        <td className="py-3.5 px-6">
+                          {hasCustomImg ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <Sparkles className="w-3 h-3 text-emerald-600" />
+                              <span>صورة مخصصة</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-600 border border-neutral-200">
+                              <span>افتراضية احترافية</span>
+                            </span>
+                          )}
                         </td>
 
                         {/* Linked Products Count */}
@@ -358,7 +439,7 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                             <button
                               onClick={() => handleOpenEdit(cat)}
                               className="p-2 text-neutral-500 hover:text-[#1E1E1E] hover:bg-neutral-100 rounded-lg transition-colors cursor-pointer"
-                              title="تعديل التصنيف"
+                              title="تعديل التصنيف وصورته"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -392,7 +473,7 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
       {/* Create / Edit Category Modal */}
       {(isCreatingNew || editingCategory) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-neutral-200 space-y-6 animate-in zoom-in-95 duration-150">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-neutral-200 space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
             
             <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
               <h3 className="font-bold text-[#1E1E1E] text-base flex items-center gap-2">
@@ -416,6 +497,84 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
 
             <form onSubmit={handleSubmitForm} className="space-y-4">
               
+              {/* Category Image Section */}
+              <div className="p-4 bg-[#F8F8F7] rounded-2xl border border-neutral-200/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-[#FF551A]" />
+                    <span>صورة التصنيف المعروضة</span>
+                  </label>
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    formImageUrl
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {formImageUrl ? 'صورة مخصصة' : 'صورة افتراضية جاهزة'}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  {/* Image preview box */}
+                  <div className="relative w-28 h-24 rounded-2xl overflow-hidden border border-neutral-300 shadow-xs shrink-0 bg-neutral-200">
+                    <img
+                      src={formImageUrl || getDefaultCategoryImage(formNameEn || formNameAr || editingCategory?.id)}
+                      alt="معاينة صورة التصنيف"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = getDefaultCategoryImage(formNameEn || formNameAr);
+                      }}
+                    />
+                    {isUploadingImage && (
+                      <div className="absolute inset-0 bg-neutral-900/60 flex items-center justify-center">
+                        <RotateCcw className="w-5 h-5 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload and restore actions */}
+                  <div className="flex-1 w-full space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1E1E1E] hover:bg-[#FF551A] text-white text-xs font-bold cursor-pointer transition-all shadow-xs">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{formImageUrl ? 'تغيير الصورة' : 'رفع صورة مخصصة'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageUpload}
+                          disabled={isUploadingImage}
+                        />
+                      </label>
+
+                      {formImageUrl ? (
+                        <button
+                          type="button"
+                          onClick={handleRestoreDefaultImage}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-700 border border-neutral-200 text-xs font-bold cursor-pointer transition-all"
+                          title="حذف الصورة المخصصة والعودة إلى الصورة الافتراضية"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                          <span>استعادة الصورة الافتراضية</span>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <p className="text-[11px] text-neutral-500 leading-relaxed">
+                      {formImageUrl
+                        ? 'تم رفع صورة مخصصة لهذا التصنيف. يمكنك استبدالها بصورة جديدة أو العودة للصورة الافتراضية في أي وقت.'
+                        : 'يستخدم المتجر صورة أثاث عالية الجودة مناسبة لنوع التصنيف. يمكنك تخصيص الصورة برفع صورة من جهازك.'}
+                    </p>
+
+                    {imageUploadError && (
+                      <div className="text-[11px] font-bold text-red-600 flex items-center gap-1 bg-red-50 p-2 rounded-lg border border-red-200">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{imageUploadError}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-neutral-700 mb-1.5">
                   اسم التصنيف بالعربية <span className="text-red-500">*</span>
@@ -493,7 +652,7 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isUploadingImage}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#FF551A] hover:bg-[#e04812] text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />

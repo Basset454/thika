@@ -249,6 +249,7 @@ export async function createCategory(cat: {
   order?: number;
   isHidden?: boolean;
   description?: string;
+  imageUrl?: string;
 }): Promise<Category> {
   const sessionToken = getAdminToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

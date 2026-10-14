@@ -166,6 +166,7 @@ export default async function handler(req: any, res: any) {
       const order = typeof body?.order === 'number' ? body.order : 99;
       const isHidden = Boolean(body?.isHidden);
       const description = (body?.description || '').trim();
+      const imageUrl = body?.imageUrl !== undefined ? (String(body.imageUrl).trim() || undefined) : undefined;
 
       const newCategory: CategoryRecord = {
         id,
@@ -174,6 +175,7 @@ export default async function handler(req: any, res: any) {
         order,
         isHidden,
         description: description || undefined,
+        imageUrl,
         productCount: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -217,6 +219,7 @@ export default async function handler(req: any, res: any) {
       if (body?.order !== undefined) updates.order = Number(body.order);
       if (body?.isHidden !== undefined) updates.isHidden = Boolean(body.isHidden);
       if (body?.description !== undefined) updates.description = String(body.description).trim();
+      if (body?.imageUrl !== undefined) updates.imageUrl = String(body.imageUrl).trim() || undefined;
 
       if (isNeonConfigured()) {
         try {

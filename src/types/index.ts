@@ -56,6 +56,7 @@ export interface Category {
   order: number;
   isHidden: boolean;
   description?: string;
+  imageUrl?: string;
   productCount?: number;
   createdAt?: string;
   updatedAt?: string;
