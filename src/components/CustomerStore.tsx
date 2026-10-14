@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product, Category, StoreSettings } from '../types';
+import { Product, Category, StoreSettings, TrustStandardsSection } from '../types';
 import { ARABIC_CATEGORIES, formatDZD, getProductPricing } from '../data/initialProducts';
 import { EditorialHero } from './EditorialHero';
 import { ProductCard } from './ProductCard';
@@ -36,6 +36,7 @@ interface CustomerStoreProps {
   onCategoryChange?: (category: string) => void;
   settings?: StoreSettings | null;
   categories?: Category[];
+  trustStandards?: TrustStandardsSection | null;
 }
 
 export const CustomerStore: React.FC<CustomerStoreProps> = ({
@@ -44,6 +45,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
   onCategoryChange,
   settings,
   categories: dynamicCategories,
+  trustStandards,
 }) => {
   const [internalCategory, setInternalCategory] = useState<string>('All');
   const selectedCategory = externalCategory !== undefined ? externalCategory : internalCategory;
@@ -564,7 +566,11 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
             و) قصة الخامات المعمارية والضمان الأكيد (ARCHITECTURAL MATERIALS STORY)
             ========================================================================= */}
         <div className="reveal-fade-up">
-          <ArchitecturalMaterialsSection />
+          <ArchitecturalMaterialsSection
+            standards={trustStandards}
+            products={products}
+            onOpenProductModal={openProductModal}
+          />
         </div>
 
       </div>
@@ -835,6 +841,33 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                       القطعة معروضة أو متاحة للطلب عبر فروع أثاث الثقة (أثاث الثقة 1، 2، 3).
                     </p>
                   </div>
+
+                  {/* Linked Trust Standards & Materials for this specific product */}
+                  {(() => {
+                    const specificStandards = (trustStandards?.items || []).filter(
+                      (it) => !it.isHidden && it.linkedProductIds && it.linkedProductIds.includes(activeProduct.id)
+                    );
+                    if (specificStandards.length === 0) return null;
+                    return (
+                      <div className="mt-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200 text-xs text-neutral-600 space-y-1.5">
+                        <div className="flex items-center gap-1.5 font-bold text-[#1E1E1E]">
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#FF551A]" />
+                          <span>خامات ومعايير خاصة بهذه القطعة:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {specificStandards.map((std) => (
+                            <span
+                              key={std.id}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white border border-neutral-200 px-2 py-0.5 rounded text-neutral-800"
+                            >
+                              <span>{std.title}</span>
+                              {std.subtitle && <span className="text-neutral-400">({std.subtitle})</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Inquiry & Contact Actions */}

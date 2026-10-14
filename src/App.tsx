@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings } from './types';
+import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings, TrustStandardsSection } from './types';
 import { 
   getProducts, 
   createProduct, 
@@ -11,7 +11,8 @@ import {
   checkAdminStatus,
   adminLogout,
   getCategories,
-  getStoreSettings
+  getStoreSettings,
+  getTrustStandards
 } from './services/api';
 import { CustomerNavbar } from './components/CustomerNavbar';
 import { CustomerStore } from './components/CustomerStore';
@@ -29,6 +30,7 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
+  const [trustStandards, setTrustStandards] = useState<TrustStandardsSection | null>(null);
   const [storeCategory, setStoreCategory] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [blobStatus, setBlobStatus] = useState<BlobStatus | null>(null);
@@ -109,6 +111,15 @@ export default function App() {
     }
   };
 
+  const refreshTrustStandards = async (forAdmin?: boolean) => {
+    try {
+      const data = await getTrustStandards(forAdmin ?? isAdminRoute);
+      setTrustStandards(data);
+    } catch (err: any) {
+      console.warn('Could not load trust standards:', err);
+    }
+  };
+
   const refreshBlobStatus = async () => {
     try {
       const status = await getBlobStatus();
@@ -134,6 +145,7 @@ export default function App() {
         refreshProducts(isAdminRoute),
         refreshCategories(isAdminRoute),
         refreshSettings(),
+        refreshTrustStandards(isAdminRoute),
         refreshBlobStatus(),
         refreshDbStatus(),
       ]);
@@ -230,6 +242,8 @@ export default function App() {
                 onRefreshDbStatus={refreshDbStatus}
                 onCategoriesUpdated={setCategories}
                 onSettingsUpdated={setSettings}
+                trustStandards={trustStandards}
+                onTrustStandardsUpdated={setTrustStandards}
                 showToast={showToast}
               />
             )}
@@ -258,6 +272,7 @@ export default function App() {
                   products={products}
                   categories={categories}
                   settings={settings}
+                  trustStandards={trustStandards}
                   selectedCategory={storeCategory}
                   onCategoryChange={setStoreCategory}
                 />

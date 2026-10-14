@@ -27,10 +27,11 @@ import {
   DollarSign,
   Percent
 } from 'lucide-react';
-import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings } from '../types';
+import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings, TrustStandardsSection } from '../types';
 import { AdminProductForm } from './AdminProductForm';
 import { AdminCategoriesManager } from './AdminCategoriesManager';
 import { AdminStorefrontSettings } from './AdminStorefrontSettings';
+import { AdminTrustStandardsManager } from './AdminTrustStandardsManager';
 import { getCustomBlobToken, setCustomBlobToken, changeAdminPassword } from '../services/api';
 import { formatDZD, ARABIC_CATEGORIES, getProductPricing } from '../data/initialProducts';
 
@@ -38,7 +39,8 @@ interface AdminPanelProps {
   products: Product[];
   categories?: Category[];
   settings?: StoreSettings | null;
-  currentAdminSubpath: string; // e.g. '/admin/products', '/admin/categories', '/admin/storefront', '/admin/products/new', '/admin/products/:id/edit'
+  trustStandards?: TrustStandardsSection | null;
+  currentAdminSubpath: string; // e.g. '/admin/products', '/admin/categories', '/admin/storefront', '/admin/trust-standards', '/admin/products/new', '/admin/products/:id/edit'
   navigateAdmin: (path: string) => void;
   onAddProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
@@ -51,6 +53,7 @@ interface AdminPanelProps {
   onRefreshDbStatus?: () => Promise<void>;
   onCategoriesUpdated?: (categories: Category[]) => void;
   onSettingsUpdated?: (settings: StoreSettings) => void;
+  onTrustStandardsUpdated?: (standards: TrustStandardsSection) => void;
   showToast: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -58,6 +61,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   products,
   categories = [],
   settings = null,
+  trustStandards = null,
   currentAdminSubpath,
   navigateAdmin,
   onAddProduct,
@@ -71,6 +75,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onRefreshDbStatus,
   onCategoriesUpdated,
   onSettingsUpdated,
+  onTrustStandardsUpdated,
   showToast,
 }) => {
   const [isTokenSettingsOpen, setIsTokenSettingsOpen] = useState(false);
@@ -91,6 +96,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Determine current view
   const isCategoriesView = currentAdminSubpath === '/admin/categories';
   const isStorefrontView = currentAdminSubpath === '/admin/storefront';
+  const isTrustStandardsView = currentAdminSubpath === '/admin/trust-standards';
   const isNewView = currentAdminSubpath === '/admin/products/new';
   const isEditView = currentAdminSubpath.includes('/edit');
   const editingId = isEditView ? currentAdminSubpath.split('/')[3] : null;
@@ -316,7 +322,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <span>واجهة المتجر والهيدر</span>
           </button>
 
-          {/* Tab 4: Add Product */}
+          {/* Tab 4: Trust Standards & Materials */}
+          <button
+            onClick={() => navigateAdmin('/admin/trust-standards')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isTrustStandardsView
+                ? 'bg-[#FF551A] text-white shadow-sm'
+                : 'bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>معايير الثقة والخامات</span>
+          </button>
+
+          {/* Tab 5: Add Product */}
           <button
             onClick={() => navigateAdmin('/admin/products/new')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -334,7 +353,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* =========================================================================
           HONEST METRICS DASHBOARD (Real Data Only!)
           ========================================================================= */}
-      {!isNewView && !isEditView && !isCategoriesView && !isStorefrontView && (
+      {!isNewView && !isEditView && !isCategoriesView && !isStorefrontView && !isTrustStandardsView && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
             <span className="text-xs text-neutral-500 font-semibold block">إجمالي المنتجات</span>
@@ -424,9 +443,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* =========================================================================
-          VIEW 5: PRODUCTS LIST & CATALOG TABLE (/admin/products)
+          VIEW 5: TRUST STANDARDS & MATERIALS MANAGER (/admin/trust-standards)
           ========================================================================= */}
-      {!isNewView && !isEditView && !isCategoriesView && !isStorefrontView && (
+      {isTrustStandardsView && (
+        <AdminTrustStandardsManager
+          products={products}
+          onStandardsUpdated={onTrustStandardsUpdated}
+          showToast={showToast}
+        />
+      )}
+
+      {/* =========================================================================
+          VIEW 6: PRODUCTS LIST & CATALOG TABLE (/admin/products)
+          ========================================================================= */}
+      {!isNewView && !isEditView && !isCategoriesView && !isStorefrontView && !isTrustStandardsView && (
         <div className="bg-white rounded-3xl border border-neutral-200 shadow-xs overflow-hidden space-y-4">
           
           {/* Table Header & Search Controls */}

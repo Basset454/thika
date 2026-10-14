@@ -1,4 +1,4 @@
-import { Product, ProductImage, ProductVideo, BlobStatus, DatabaseStatus, Category, StoreSettings } from '../types';
+import { Product, ProductImage, ProductVideo, BlobStatus, DatabaseStatus, Category, StoreSettings, TrustStandardsSection } from '../types';
 import { upload } from '@vercel/blob/client';
 
 let inMemoryAdminToken: string | null = null;
@@ -342,6 +342,47 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
     throw new Error(data.error || 'فشل حفظ إعدادات واجهة المتجر.');
   }
   return data.settings;
+}
+
+// -------------------------------------------------------------
+// Real Server Trust Standards & Materials APIs
+// -------------------------------------------------------------
+export async function getTrustStandards(forAdmin = false): Promise<TrustStandardsSection> {
+  const sessionToken = getAdminToken();
+  const url = forAdmin ? '/api/trust-standards?admin=true' : '/api/trust-standards';
+  const headers: Record<string, string> = {};
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch(url, { credentials: 'include', headers });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.error || `فشل جلب معايير الثقة (${res.status})`);
+  }
+  const data = await res.json();
+  return data.standards;
+}
+
+export async function updateTrustStandards(standards: TrustStandardsSection): Promise<TrustStandardsSection> {
+  const sessionToken = getAdminToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch('/api/trust-standards', {
+    method: 'PUT',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(standards),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'فشل حفظ معايير الثقة والخامات.');
+  }
+  return data.standards;
 }
 
 // -------------------------------------------------------------

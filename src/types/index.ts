@@ -93,3 +93,34 @@ export interface DatabaseStatus {
   error?: string;
 }
 
+export interface TrustStandardPoint {
+  id: string;
+  title: string;
+  description?: string;
+  badge?: string;
+}
+
+export interface TrustStandardItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  image?: string;
+  quote?: string;
+  points?: TrustStandardPoint[];
+  linkedProductIds?: string[];
+  order: number;
+  isHidden?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TrustStandardsSection {
+  enabled: boolean;
+  badgeText?: string;
+  title: string;
+  description?: string;
+  items: TrustStandardItem[];
+  updatedAt?: string;
+}
+

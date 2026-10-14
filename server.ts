@@ -15,6 +15,7 @@ import dbStatusHandler from './api/db-status.js';
 import changePasswordHandler from './api/admin/change-password.js';
 import categoriesHandler from './api/categories';
 import settingsHandler from './api/settings';
+import trustStandardsHandler from './api/trust-standards';
 
 dotenv.config();
 
@@ -102,6 +103,10 @@ app.all('/api/categories/:id', (req: Request, res: Response) => {
 
 app.all('/api/settings', (req: Request, res: Response) => {
   return settingsHandler(req, res);
+});
+
+app.all('/api/trust-standards', (req: Request, res: Response) => {
+  return trustStandardsHandler(req, res);
 });
 
 // -------------------------------------------------------------
