@@ -12,7 +12,7 @@ export const LogoMark: React.FC<LogoMarkProps> = ({ className = "w-10 h-10", siz
       style={size ? { width: size, height: size } : undefined}
     >
       <img
-        src="/logo.jpg"
+        src="https://js5vhhxkv7b7mmcq.public.blob.vercel-storage.com/454620827_501342975777167_8758272364689496478_n%20%281%29.jpg"
         alt="شعار أثاث الثقة"
         className="w-full h-full object-contain"
         onError={(e) => {
