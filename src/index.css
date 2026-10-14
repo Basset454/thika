@@ -73,6 +73,90 @@ body {
   animation: typewriterBlink 0.9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Calm Pulse Animation for Hero Arrow Button */
+@keyframes calmPulseRing {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(255, 85, 26, 0.45);
+  }
+  70% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 10px rgba(255, 85, 26, 0);
+  }
+  100% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(255, 85, 26, 0);
+  }
+}
+
+@keyframes gentleFloatArrow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+.animate-calm-pulse {
+  animation: calmPulseRing 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-gentle-arrow {
+  animation: gentleFloatArrow 2.2s ease-in-out infinite;
+}
+
+/* Architectural Scroll Reveal Animations */
+.reveal-fade-up {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-fade-up.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-fade-side {
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-fade-side.is-revealed {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Curtain Image Reveal */
+.reveal-image-curtain {
+  clip-path: inset(0 0 100% 0);
+  opacity: 0.7;
+  transition: clip-path 1.05s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: clip-path, opacity;
+}
+
+.reveal-image-curtain.is-revealed {
+  clip-path: inset(0 0 0 0);
+  opacity: 1;
+}
+
+/* Staggered Card Entrance */
+.reveal-card {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-card.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
@@ -81,8 +165,18 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .animate-typewriter-cursor {
+  .animate-typewriter-cursor,
+  .animate-calm-pulse,
+  .animate-gentle-arrow {
     animation: none !important;
-    opacity: 0 !important;
+  }
+  .reveal-fade-up,
+  .reveal-fade-side,
+  .reveal-image-curtain,
+  .reveal-card {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+    transition: none !important;
   }
 }

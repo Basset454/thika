@@ -3,6 +3,8 @@ import { Product } from '../types';
 import { ARABIC_CATEGORIES, formatDZD } from '../data/initialProducts';
 import { EditorialHero } from './EditorialHero';
 import { BranchLocationsSection } from './BranchLocationsSection';
+import { ArchitecturalMaterialsSection } from './ArchitecturalMaterialsSection';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 import {
   Eye,
   X,
@@ -239,8 +241,10 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
     },
   ];
 
+  const storeContainerRef = useScrollReveal([filteredProducts, selectedCategory, searchQuery, sortBy]);
+
   return (
-    <div className="space-y-0 pb-20">
+    <div ref={storeContainerRef} className="space-y-0 pb-20">
       
       {/* =========================================================================
           أ) الواجهة الرئيسية (HERO SECTION)
@@ -248,6 +252,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
       <EditorialHero
         onExploreCatalog={() => scrollToAnchor('catalog')}
         onExploreBranches={() => scrollToAnchor('branches')}
+        onScrollToCategories={() => scrollToAnchor('categories')}
         featuredProduct={featuredProducts[0]}
         onOpenProductModal={openProductModal}
       />
@@ -259,7 +264,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
             ب) تصنيفات بصرية واضحة (VISUAL CATEGORIES)
             ========================================================================= */}
         <section id="categories" className="space-y-8 scroll-mt-24">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-neutral-200 pb-5">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-neutral-200 pb-5 reveal-fade-up">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
@@ -282,13 +287,14 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {visualCategories.map((cat) => (
+            {visualCategories.map((cat, index) => (
               <div
                 key={cat.id}
                 onClick={() => selectCategoryAndScroll(cat.id)}
-                className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between"
+                className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between reveal-card"
+                style={{ transitionDelay: `${index * 85}ms` }}
               >
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100">
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100 reveal-image-curtain">
                   <img
                     src={cat.image}
                     alt={cat.nameAr}
@@ -322,7 +328,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
             ========================================================================= */}
         {featuredProducts.length > 0 && (
           <section id="featured" className="space-y-8 scroll-mt-24">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-neutral-200 pb-5">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-neutral-200 pb-5 reveal-fade-up">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
@@ -340,7 +346,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredProducts.map((product) => {
+              {featuredProducts.map((product, index) => {
                 const coverImage = product.images.find((img) => img.isCover) || product.images[0];
                 const secondaryImage =
                   product.images.length > 1
@@ -352,16 +358,17 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                   <article
                     key={product.id}
                     onClick={() => openProductModal(product)}
-                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between"
+                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between reveal-card"
+                    style={{ transitionDelay: `${index * 85}ms` }}
                   >
-                    {/* Consistent 4:3 Product Image */}
+                    {/* Consistent 4:3 Product Image with Internal Zoom */}
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
                       <img
                         src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
                         alt={product.name}
                         referrerPolicy="no-referrer"
-                        className={`w-full h-full object-cover transition-all duration-500 ${
-                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-104'
+                        className={`w-full h-full object-cover transition-all duration-500 ease-out ${
+                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-105'
                         }`}
                         loading="lazy"
                       />
@@ -370,7 +377,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                           src={secondaryImage.url}
                           alt={`${product.name} - زاوية أخرى`}
                           referrerPolicy="no-referrer"
-                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-104"
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-105"
                           loading="lazy"
                         />
                       )}
@@ -397,7 +404,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                       )}
                     </div>
 
-                    {/* Card Content */}
+                    {/* Card Content (Fixed and Stable) */}
                     <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                       <div>
                         <h3 className="text-base font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors truncate">
@@ -536,7 +543,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
           {/* Product Grid */}
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {filteredProducts.map((product) => {
+              {filteredProducts.map((product, index) => {
                 const coverImage = product.images.find((img) => img.isCover) || product.images[0];
                 const secondaryImage =
                   product.images.length > 1
@@ -548,16 +555,17 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                   <article
                     key={product.id}
                     onClick={() => openProductModal(product)}
-                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between"
+                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between reveal-card"
+                    style={{ transitionDelay: `${(index % 6) * 75}ms` }}
                   >
-                    {/* Consistent 4:3 Image */}
+                    {/* Consistent 4:3 Image with Internal Zoom */}
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
                       <img
                         src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
                         alt={product.name}
                         referrerPolicy="no-referrer"
-                        className={`w-full h-full object-cover transition-all duration-500 ${
-                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-104'
+                        className={`w-full h-full object-cover transition-all duration-500 ease-out ${
+                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-105'
                         }`}
                         loading="lazy"
                       />
@@ -566,7 +574,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                           src={secondaryImage.url}
                           alt={`${product.name} - صورة ثانوية`}
                           referrerPolicy="no-referrer"
-                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-104"
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-105"
                           loading="lazy"
                         />
                       )}
@@ -601,7 +609,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                       </div>
                     </div>
 
-                    {/* Card Content */}
+                    {/* Card Content (Stable Dimensions) */}
                     <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
                       <div>
                         <h3 className="text-base sm:text-lg font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors truncate">
@@ -656,69 +664,16 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         {/* =========================================================================
             هـ) فروع أثاث الثقة الثلاثة (THREE BRANCHES & MAP)
             ========================================================================= */}
-        <BranchLocationsSection />
+        <div className="reveal-fade-up">
+          <BranchLocationsSection />
+        </div>
 
         {/* =========================================================================
-            و) الخامات والخدمات والضمانات المؤكدة فعلياً (MATERIALS & GUARANTEES)
+            و) قصة الخامات المعمارية والضمان الأكيد (ARCHITECTURAL MATERIALS STORY)
             ========================================================================= */}
-        <section id="guarantees" className="bg-white rounded-3xl border border-neutral-200/90 p-8 sm:p-12 space-y-8 shadow-xs scroll-mt-24">
-          <div className="max-w-2xl space-y-2">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
-              <span className="text-xs font-bold uppercase tracking-wider text-[#FF551A]">
-                معايير الثقة
-              </span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-[#1E1E1E]">
-              خامات أصيلة وضمانات مؤكدة
-            </h2>
-            <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-              نلتزم في أثاث الثقة بأعلى معايير الحرفية والمتانة لتصلكم قطع تدوم لسنوات طويلة دون هبوط أو تلف.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 border-t border-neutral-100">
-            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
-              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
-                <Award className="w-5 h-5" />
-              </div>
-              <h4 className="font-bold text-[#1E1E1E] text-sm">أخشاب طبيعية مصمتة</h4>
-              <p className="text-neutral-500 text-xs leading-relaxed">
-                هياكل صلبة من خشب الزان والبلوط المجفف حرارياً لمقاومة الرطوبة والتمدد مع مرور الزمن.
-              </p>
-            </div>
-
-            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
-              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <h4 className="font-bold text-[#1E1E1E] text-sm">أقمشة فاخرة وسهلة العناية</h4>
-              <p className="text-neutral-500 text-xs leading-relaxed">
-                أنسجة بوكليه وكتان ومخمل راقية معالجة لمقاومة امتصاص السوائل وسهولة التنظيف اليومي.
-              </p>
-            </div>
-
-            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
-              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
-                <Truck className="w-5 h-5" />
-              </div>
-              <h4 className="font-bold text-[#1E1E1E] text-sm">توصيل مع التركيب المحترف</h4>
-              <p className="text-neutral-500 text-xs leading-relaxed">
-                شحن آمن إلى جميع ولايات الجزائر، مع فريق تركيب متخصص لتسليم الأثاث في أفضل حلة.
-              </p>
-            </div>
-
-            <div className="space-y-2.5 p-4 rounded-2xl bg-neutral-50/70 border border-neutral-100">
-              <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-[#FF551A]">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <h4 className="font-bold text-[#1E1E1E] text-sm">ضمان ومتابعة ما بعد البيع</h4>
-              <p className="text-neutral-500 text-xs leading-relaxed">
-                ضمان معتمد على متانة الهيكل الداخلي وثبات الإسفنج عالي الكثافة، مع متابعة دورية مستمرة.
-              </p>
-            </div>
-          </div>
-        </section>
+        <div className="reveal-fade-up">
+          <ArchitecturalMaterialsSection />
+        </div>
 
       </div>
 

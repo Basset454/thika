@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product } from '../types';
-import { ChevronLeft, MapPin, Eye } from 'lucide-react';
+import { ChevronLeft, MapPin, Eye, ArrowDown } from 'lucide-react';
 
 interface EditorialHeroProps {
   onExploreCatalog: () => void;
   onExploreBranches: () => void;
+  onScrollToCategories?: () => void;
   featuredProduct?: Product;
   onOpenProductModal?: (product: Product) => void;
 }
@@ -19,12 +20,38 @@ const HERO_SUB_PHRASES = [
 export const EditorialHero: React.FC<EditorialHeroProps> = ({
   onExploreCatalog,
   onExploreBranches,
+  onScrollToCategories,
   featuredProduct,
   onOpenProductModal,
 }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(true);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
+
+  // Scroll listener for subtle hero image parallax
+  useEffect(() => {
+    if (typeof window === 'undefined' || prefersReducedMotion) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          if (window.scrollY < 1200) {
+            setScrollY(window.scrollY);
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [prefersReducedMotion]);
+
+  // Subtle parallax offset bounded tightly so image remains crisp and centered in its frame
+  const parallaxOffset = prefersReducedMotion ? 0 : Math.min(scrollY * 0.12, 38);
 
   // Typewriter state for the complementary secondary line
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -172,6 +199,35 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
               </div>
             </div>
 
+            {/* 4. Smooth Arrow Button to Categories with Calm Pulse Effect */}
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onScrollToCategories) {
+                    onScrollToCategories();
+                  } else {
+                    const catEl = document.getElementById('categories');
+                    if (catEl) {
+                      catEl.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }
+                }}
+                className="group inline-flex items-center gap-2.5 px-3.5 sm:px-4 py-2 rounded-full bg-white text-neutral-800 hover:text-[#FF551A] border border-neutral-200/90 hover:border-[#FF551A]/40 shadow-xs hover:shadow-md transition-all duration-300 text-xs sm:text-sm font-bold cursor-pointer relative"
+                aria-label="الانتقال التلقائي إلى قسم تصنيفات الأثاث"
+              >
+                {/* Calm Pulse Ring Indicator */}
+                <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+                  <span className="animate-calm-pulse absolute inline-flex h-full w-full rounded-full bg-[#FF551A]" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#FF551A]" />
+                </span>
+                <span>استكشف تصنيفات الأثاث</span>
+                <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-neutral-100 group-hover:bg-[#FF551A] text-neutral-600 group-hover:text-white flex items-center justify-center transition-all duration-300 group-hover:translate-y-0.5 shrink-0">
+                  <ArrowDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-gentle-arrow" />
+                </span>
+              </button>
+            </div>
+
             {/* Very Short & Focused Paragraph */}
             <p className="text-neutral-600 text-sm sm:text-base lg:text-lg leading-relaxed max-w-xl font-normal">
               دار متخصصة في تصميم وتوريد أرقى الصالونات، غرف الطعام، والمساحات المكتبية. نعتمد أخشاب الزان والبلوط الطبيعية وأفخر الأقمشة لتجربة راحة استثنائية.
@@ -209,7 +265,7 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
 
           </div>
 
-          {/* High-Quality Visual Showcase Column */}
+          {/* High-Quality Visual Showcase Column with Hero Parallax */}
           <div className="lg:col-span-6">
             <div className="relative rounded-3xl overflow-hidden bg-neutral-100 border border-neutral-200/80 shadow-xl group aspect-[4/3] sm:aspect-[16/11]">
               <img
@@ -217,6 +273,12 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
                 alt="أثاث صالون عصري فاخر من تشكيلة أثاث الثقة"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-103"
+                style={{
+                  transform: prefersReducedMotion
+                    ? undefined
+                    : `translate3d(0, ${parallaxOffset}px, 0) scale(1.06)`,
+                  willChange: 'transform',
+                }}
                 loading="eager"
                 fetchPriority="high"
               />
