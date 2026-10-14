@@ -95,7 +95,21 @@ export default async function handler(request: any, response: any) {
       request,
       onBeforeGenerateToken: async (pathname: string) => {
         return {
-          allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'],
+          allowedContentTypes: [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif',
+            'image/avif',
+            'image/svg+xml',
+            'video/mp4',
+            'video/webm',
+            'video/quicktime',
+            'video/ogg',
+            'video/x-m4v',
+            'video/x-matroska',
+          ],
+          maximumSizeInBytes: 100 * 1024 * 1024,
           tokenPayload: JSON.stringify({ pathname }),
         };
       },

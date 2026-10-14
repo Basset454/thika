@@ -43,8 +43,8 @@ const PORT = Number(
 const HOST = (hostArgIndex !== -1 && args[hostArgIndex + 1]) || process.env.HOST || '0.0.0.0';
 
 // Enable JSON parser for normal routes
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // -------------------------------------------------------------
 // 1. API: Admin Authentication (Protected, Fail-Closed, No Hardcoded Secrets)
@@ -88,11 +88,11 @@ app.all('/api/products/:id', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 4. API: Upload Image to Vercel Blob (NO FAKE / LOCAL FALLBACK)
+// 4. API: Upload Media (Images & Videos) to Vercel Blob (NO FAKE / LOCAL FALLBACK)
 // -------------------------------------------------------------
 const uploadMulter = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 },
 });
 
 app.all('/api/upload', uploadMulter.any(), (req: Request, res: Response) => {

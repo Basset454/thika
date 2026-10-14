@@ -8,6 +8,16 @@ export interface ProductImage {
   uploadedAt: string;
 }
 
+export interface ProductVideo {
+  id: string;
+  url: string;
+  pathname?: string;
+  name?: string;
+  size?: number;
+  mimeType?: string;
+  uploadedAt: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -15,6 +25,7 @@ export interface Product {
   description: string;
   category: string;
   images: ProductImage[];
+  videos?: ProductVideo[];
   coverImageUrl: string;
   isPublished: boolean;
   isFeatured: boolean;

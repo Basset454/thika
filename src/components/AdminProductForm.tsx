@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, ArrowRight, AlertCircle, Sparkles, Package, CheckCircle2 } from 'lucide-react';
-import { Product, ProductImage } from '../types';
+import { Product, ProductImage, ProductVideo } from '../types';
 import { FURNITURE_CATEGORIES, ARABIC_CATEGORIES, formatDZD } from '../data/initialProducts';
 import { AdminImageUploader } from './AdminImageUploader';
 
@@ -20,6 +20,7 @@ export const AdminProductForm: React.FC<AdminProductFormProps> = ({
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Living Room');
   const [images, setImages] = useState<ProductImage[]>([]);
+  const [videos, setVideos] = useState<ProductVideo[]>([]);
   const [isPublished, setIsPublished] = useState(true);
   const [isFeatured, setIsFeatured] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export const AdminProductForm: React.FC<AdminProductFormProps> = ({
       setDescription(initialProduct.description || '');
       setCategory(initialProduct.category || 'Living Room');
       setImages(initialProduct.images || []);
+      setVideos(initialProduct.videos || []);
       setIsPublished(initialProduct.isPublished !== false);
       setIsFeatured(Boolean(initialProduct.isFeatured));
     } else {
@@ -40,6 +42,7 @@ export const AdminProductForm: React.FC<AdminProductFormProps> = ({
       setDescription('');
       setCategory('Living Room');
       setImages([]);
+      setVideos([]);
       setIsPublished(true);
       setIsFeatured(false);
     }
@@ -78,6 +81,7 @@ export const AdminProductForm: React.FC<AdminProductFormProps> = ({
         description: description.trim(),
         category,
         images: finalImages,
+        videos,
         coverImageUrl: coverObj.url,
         isPublished,
         isFeatured,
@@ -201,11 +205,14 @@ export const AdminProductForm: React.FC<AdminProductFormProps> = ({
           />
         </div>
 
-        {/* Real Vercel Blob Image Uploader */}
+        {/* Real Vercel Blob Media (Images & Videos) Uploader */}
         <div className="bg-neutral-50 p-6 rounded-2xl border border-neutral-200">
           <AdminImageUploader
             images={images}
+            videos={videos}
             onChange={setImages}
+            onImagesChange={setImages}
+            onVideosChange={setVideos}
           />
         </div>
 

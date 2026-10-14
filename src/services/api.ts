@@ -1,4 +1,4 @@
-import { Product, ProductImage, BlobStatus, DatabaseStatus } from '../types';
+import { Product, ProductImage, ProductVideo, BlobStatus, DatabaseStatus } from '../types';
 import { upload } from '@vercel/blob/client';
 
 let inMemoryAdminToken: string | null = null;
@@ -336,6 +336,122 @@ export async function uploadImageFiles(
   return uploadedResults;
 }
 
+// -------------------------------------------------------------
+// Real Vercel Blob Video Upload (supports MP4, WebM, MOV, OGG up to 100MB)
+// -------------------------------------------------------------
+export async function uploadVideoFiles(
+  files: File[],
+  onProgress?: (progress: number) => void
+): Promise<ProductVideo[]> {
+  const customToken = getCustomBlobToken();
+  const uploadedResults: ProductVideo[] = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    onProgress?.(Math.round(((i + 0.1) / files.length) * 100));
+
+    // Validate size limit (max 100MB)
+    if (file.size > 100 * 1024 * 1024) {
+      throw new Error(
+        `حجم الفيديو "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (100 ميجابايت).`
+      );
+    }
+
+    const cleanFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const pathname = `videos/${Date.now()}-${cleanFilename}`;
+
+    let uploadedBlob: { url: string; pathname?: string; size?: number; contentType?: string } | null = null;
+    let lastError: Error | null = null;
+
+    // 1. Try official client upload flow (@vercel/blob/client)
+    try {
+      const blob = await upload(pathname, file, {
+        access: 'public',
+        handleUploadUrl: '/api/blob-upload',
+        clientPayload: JSON.stringify({ token: customToken || undefined }),
+        onUploadProgress: ({ percentage }) => {
+          onProgress?.(Math.round(((i + percentage / 100) / files.length) * 100));
+        },
+      });
+
+      uploadedBlob = {
+        url: blob.url,
+        pathname: blob.pathname,
+        size: file.size,
+        contentType: blob.contentType,
+      };
+    } catch (clientErr: any) {
+      console.warn('Official @vercel/blob/client video upload error, attempting server upload:', clientErr);
+      lastError = clientErr;
+    }
+
+    // 2. If client-side token flow was not available, call server upload endpoint (/api/upload)
+    if (!uploadedBlob) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('video', file);
+
+        const headers: Record<string, string> = {};
+        if (customToken) {
+          headers['x-blob-token'] = customToken;
+        }
+        if (inMemoryAdminToken) {
+          headers['Authorization'] = `Bearer ${inMemoryAdminToken}`;
+        }
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          credentials: 'include',
+          headers,
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error ||
+            `فشل رفع الفيديو على الخادم (${res.status}). ${lastError?.message || ''}`
+          );
+        }
+
+        const data = await res.json();
+        if (data.url) {
+          uploadedBlob = {
+            url: data.url,
+            pathname: data.pathname,
+            size: data.size || file.size,
+            contentType: data.contentType,
+          };
+        } else {
+          throw new Error('تم الرفع ولكن لم يتم إرجاع رابط الفيديو من Vercel Blob.');
+        }
+      } catch (serverErr: any) {
+        console.error('All Vercel Blob video upload methods failed:', serverErr);
+        throw new Error(
+          serverErr.message ||
+          'فشل رفع ملف الفيديو إلى Vercel Blob. يرجى التأكد من اتصال التخزين السحابي وصلاحيات المسؤول.'
+        );
+      }
+    }
+
+    if (uploadedBlob) {
+      uploadedResults.push({
+        id: `vid-${Date.now()}-${i}`,
+        url: uploadedBlob.url,
+        pathname: uploadedBlob.pathname,
+        name: file.name,
+        size: uploadedBlob.size || file.size,
+        mimeType: file.type || uploadedBlob.contentType || 'video/mp4',
+        uploadedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  onProgress?.(100);
+  return uploadedResults;
+}
+
 export async function deleteImageFile(url: string): Promise<boolean> {
   const token = getCustomBlobToken();
   const headers: Record<string, string> = {
@@ -357,6 +473,8 @@ export async function deleteImageFile(url: string): Promise<boolean> {
 
   return res.ok;
 }
+
+export const deleteMediaFile = deleteImageFile;
 
 export async function getBlobStatus(): Promise<BlobStatus> {
   const customToken = getCustomBlobToken();

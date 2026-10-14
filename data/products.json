@@ -1,5 +1,44 @@
 [
   {
+    "id": "prod-1791973760575-r8b42",
+    "name": "صالون ملكي مودرن مع فيديو استعراض",
+    "description": "صالون فاخر مصمم من الخشب الصلب مع قماش بوكليه ناعم، يتضمن فيديو تفصيلي للمعاينة من كل الزوايا.",
+    "price": 185000,
+    "category": "Living Room",
+    "coverImageUrl": "https://test23-blob.public.blob.vercel-storage.com/products/salon-royal-1.jpg",
+    "images": [
+      {
+        "id": "img-test-1",
+        "url": "https://test23-blob.public.blob.vercel-storage.com/products/salon-royal-1.jpg",
+        "name": "salon-royal-1.jpg",
+        "isCover": true,
+        "uploadedAt": "2026-10-14T10:29:20.567Z"
+      },
+      {
+        "id": "img-test-2",
+        "url": "https://test23-blob.public.blob.vercel-storage.com/products/salon-royal-2.jpg",
+        "name": "salon-royal-2.jpg",
+        "isCover": false,
+        "uploadedAt": "2026-10-14T10:29:20.568Z"
+      }
+    ],
+    "videos": [
+      {
+        "id": "vid-test-1",
+        "url": "https://test23-blob.public.blob.vercel-storage.com/videos/salon-royal-tour.mp4",
+        "name": "salon-royal-tour.mp4",
+        "size": 8400000,
+        "mimeType": "video/mp4",
+        "pathname": "videos/salon-royal-tour.mp4",
+        "uploadedAt": "2026-10-14T10:29:20.568Z"
+      }
+    ],
+    "isPublished": true,
+    "isFeatured": true,
+    "createdAt": "2026-10-14T10:29:20.576Z",
+    "updatedAt": "2026-10-14T10:29:20.576Z"
+  },
+  {
     "id": "prod-1791926267102-shztb",
     "name": "طاولة طعام خشب زان فاخرة - فحص قاعدة البيانات",
     "description": "قطعة حقيقية مسجلة في Neon PostgreSQL ومرفوعة على Vercel Blob.",

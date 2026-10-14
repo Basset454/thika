@@ -35,18 +35,67 @@ function neutralizeInvalidBlobEnv() {
 
 neutralizeInvalidBlobEnv();
 
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'image/svg+xml',
+];
+
+const ALLOWED_VIDEO_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/ogg',
+  'video/x-m4v',
+  'video/x-matroska',
+];
+
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+
+function validateFileTypeAndSize(mimetype: string, size: number): { valid: boolean; error?: string; isVideo?: boolean } {
+  const isImg = ALLOWED_IMAGE_TYPES.includes(mimetype) || mimetype.startsWith('image/');
+  const isVid = ALLOWED_VIDEO_TYPES.includes(mimetype) || mimetype.startsWith('video/');
+
+  if (!isImg && !isVid) {
+    return {
+      valid: false,
+      error: `نوع الملف غير مدعوم (${mimetype}). الأنواع المدعومة: صور (JPG, PNG, WEBP, GIF, AVIF) أو فيديو (MP4, WEBM, MOV, OGG).`,
+    };
+  }
+
+  if (isImg && size > MAX_IMAGE_SIZE) {
+    return {
+      valid: false,
+      error: `حجم الصورة يتجاوز الحد الأقصى المسموح به (20 ميجابايت). حجم الملف الحالي: ${(size / (1024 * 1024)).toFixed(1)} ميجابايت.`,
+    };
+  }
+
+  if (isVid && size > MAX_VIDEO_SIZE) {
+    return {
+      valid: false,
+      error: `حجم الفيديو يتجاوز الحد الأقصى المسموح به (100 ميجابايت). حجم الملف الحالي: ${(size / (1024 * 1024)).toFixed(1)} ميجابايت.`,
+    };
+  }
+
+  return { valid: true, isVideo: isVid };
+}
+
 function parseNodeMultipart(req: any): Promise<{ buffer: Buffer; filename: string; mimetype: string }> {
   return new Promise((resolve, reject) => {
     const bb = busboy({ headers: req.headers });
     let fileBuffer: Buffer | null = null;
     let filename = '';
-    let mimetype = 'image/jpeg';
+    let mimetype = 'application/octet-stream';
     let fileFound = false;
 
     bb.on('file', (_name: string, fileStream: any, info: any) => {
       fileFound = true;
-      filename = info.filename || `upload-${Date.now()}.jpg`;
-      mimetype = info.mimeType || 'image/jpeg';
+      filename = info.filename || `upload-${Date.now()}`;
+      mimetype = info.mimeType || 'application/octet-stream';
       const chunks: Buffer[] = [];
 
       fileStream.on('data', (data: Buffer) => chunks.push(data));
@@ -59,7 +108,7 @@ function parseNodeMultipart(req: any): Promise<{ buffer: Buffer; filename: strin
       if (fileFound && fileBuffer) {
         resolve({ buffer: fileBuffer, filename, mimetype });
       } else {
-        reject(new Error('No valid image file found in upload'));
+        reject(new Error('لم يتم العثور على أي ملف صالح للرفع.'));
       }
     });
 
@@ -98,9 +147,9 @@ export default async function handler(req: any, res: any) {
     return new Response(JSON.stringify(errPayload), { status: 405, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Enforce server-side admin authentication for image upload
+  // Enforce server-side admin authentication for media upload
   if (!checkAdminAuth(req)) {
-    const authErr = { error: 'Unauthorized: Admin authentication required for image uploads.' };
+    const authErr = { error: 'Unauthorized: Admin authentication required for media uploads.' };
     if (typeof res?.status === 'function') return res.status(401).json(authErr);
     return new Response(JSON.stringify(authErr), {
       status: 401,
@@ -115,17 +164,24 @@ export default async function handler(req: any, res: any) {
   if (typeof req?.formData === 'function') {
     try {
       const form = await req.formData();
-      const possibleFile = form.get('file') || form.get('image') || form.get('images');
+      const possibleFile = form.get('file') || form.get('image') || form.get('images') || form.get('video') || form.get('videos');
       if (!(possibleFile instanceof File)) {
         return new Response(JSON.stringify({ error: 'No valid file received from form' }), { status: 400 });
       }
 
+      const fileType = possibleFile.type || 'application/octet-stream';
+      const validation = validateFileTypeAndSize(fileType, possibleFile.size);
+      if (!validation.valid) {
+        return new Response(JSON.stringify({ error: validation.error }), { status: 400 });
+      }
+
       const cleanFilename = possibleFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const pathname = `products/${Date.now()}-${cleanFilename}`;
+      const prefix = validation.isVideo ? 'videos' : 'products';
+      const pathname = `${prefix}/${Date.now()}-${cleanFilename}`;
 
       const putOptions = {
         access: 'public' as const,
-        contentType: possibleFile.type || 'image/jpeg',
+        contentType: fileType,
         ...(token ? { token } : {}),
       };
 
@@ -138,6 +194,7 @@ export default async function handler(req: any, res: any) {
           pathname: blob.pathname,
           contentType: blob.contentType,
           size: possibleFile.size,
+          mediaType: validation.isVideo ? 'video' : 'image',
         }),
         {
           status: 200,
@@ -165,18 +222,38 @@ export default async function handler(req: any, res: any) {
       filename = parsed.filename;
       contentType = parsed.mimetype;
     } else {
-      const rawFilename = (req.query?.filename as string) || `furniture-${Date.now()}.jpg`;
+      const rawFilename = (req.query?.filename as string) || `furniture-${Date.now()}`;
       filename = rawFilename;
-      contentType = rawContentType || 'image/jpeg';
+      contentType = rawContentType || 'application/octet-stream';
       fileBuffer = await readNodeStream(req);
     }
 
     if (!fileBuffer || fileBuffer.length === 0) {
-      return res.status(400).json({ error: 'Uploaded file is empty or missing.' });
+      return res.status(400).json({ error: 'الملف المرفوع فارغ أو مفقود.' });
+    }
+
+    // Auto-detect mimetype if generic octet-stream based on file extension
+    if (contentType === 'application/octet-stream') {
+      const lower = filename.toLowerCase();
+      if (lower.endsWith('.mp4')) contentType = 'video/mp4';
+      else if (lower.endsWith('.webm')) contentType = 'video/webm';
+      else if (lower.endsWith('.mov')) contentType = 'video/quicktime';
+      else if (lower.endsWith('.ogg')) contentType = 'video/ogg';
+      else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) contentType = 'image/jpeg';
+      else if (lower.endsWith('.png')) contentType = 'image/png';
+      else if (lower.endsWith('.webp')) contentType = 'image/webp';
+      else if (lower.endsWith('.avif')) contentType = 'image/avif';
+      else if (lower.endsWith('.gif')) contentType = 'image/gif';
+    }
+
+    const validation = validateFileTypeAndSize(contentType, fileBuffer.length);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
     }
 
     const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const pathname = `products/${Date.now()}-${cleanFilename}`;
+    const prefix = validation.isVideo ? 'videos' : 'products';
+    const pathname = `${prefix}/${Date.now()}-${cleanFilename}`;
 
     const putOptions = {
       access: 'public' as const,
@@ -192,11 +269,12 @@ export default async function handler(req: any, res: any) {
       pathname: blob.pathname,
       contentType: blob.contentType,
       size: fileBuffer.length,
+      mediaType: validation.isVideo ? 'video' : 'image',
     });
   } catch (error: any) {
     console.error('Vercel Blob upload failed:', error);
     return res.status(500).json({
-      error: `Vercel Blob upload failed: ${error.message || 'Unknown Blob error'}.`,
+      error: `فشل الرفع إلى Vercel Blob: ${error.message || 'خطأ غير معروف'}.`,
       details: error.toString(),
     });
   }

@@ -424,6 +424,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 +{prod.images.length - 1}
                               </span>
                             )}
+                            {prod.videos && prod.videos.length > 0 && (
+                              <span
+                                className="absolute top-0.5 right-0.5 bg-[#FF551A] text-white text-[8px] font-bold px-1 rounded flex items-center gap-0.5 shadow-2xs"
+                                title={`${prod.videos.length} فيديو مسجل`}
+                              >
+                                ▶ {prod.videos.length}
+                              </span>
+                            )}
                           </div>
                         </td>
 

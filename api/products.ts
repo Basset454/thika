@@ -22,6 +22,16 @@ export interface ProductImage {
   uploadedAt: string;
 }
 
+export interface ProductVideo {
+  id: string;
+  url: string;
+  pathname?: string;
+  name?: string;
+  size?: number;
+  mimeType?: string;
+  uploadedAt: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -29,6 +39,7 @@ export interface Product {
   description: string;
   category: string;
   images: ProductImage[];
+  videos?: ProductVideo[];
   coverImageUrl: string;
   isPublished: boolean;
   isFeatured: boolean;
@@ -177,6 +188,18 @@ export function normalizeProduct(raw: any): Product {
       }))
     : [];
 
+  const videos: ProductVideo[] = Array.isArray(raw?.videos)
+    ? raw.videos.map((vid: any, idx: number) => ({
+        id: String(vid?.id || `vid-${Date.now()}-${idx}`),
+        url: String(vid?.url || ''),
+        pathname: vid?.pathname ? String(vid.pathname) : undefined,
+        name: vid?.name ? String(vid.name) : undefined,
+        size: typeof vid?.size === 'number' ? vid.size : undefined,
+        mimeType: vid?.mimeType ? String(vid.mimeType) : undefined,
+        uploadedAt: String(vid?.uploadedAt || new Date().toISOString()),
+      }))
+    : [];
+
   const coverImageUrl =
     raw?.coverImageUrl ||
     images.find((img) => img.isCover)?.url ||
@@ -190,6 +213,7 @@ export function normalizeProduct(raw: any): Product {
     description: String(raw?.description || ''),
     category: String(raw?.category || 'Living Room'),
     images,
+    videos,
     coverImageUrl,
     isPublished: raw?.isPublished !== undefined ? Boolean(raw.isPublished) : true,
     isFeatured: Boolean(raw?.isFeatured),

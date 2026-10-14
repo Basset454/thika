@@ -59,6 +59,20 @@ body {
   background: #9CA3AF;
 }
 
+/* Typewriter Cursor blinking animation */
+@keyframes typewriterBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.animate-typewriter-cursor {
+  animation: typewriterBlink 0.9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
@@ -66,5 +80,9 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .animate-typewriter-cursor {
+    animation: none !important;
+    opacity: 0 !important;
   }
 }

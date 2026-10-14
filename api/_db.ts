@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { Product, ProductImage } from './products.js';
+import { Product, ProductImage, ProductVideo } from './products.js';
 
 /**
  * Resolves the active Neon PostgreSQL connection URL.
@@ -71,6 +71,17 @@ export function rowToProduct(row: any): Product {
     }
   }
 
+  let videos: ProductVideo[] = [];
+  if (Array.isArray(row.videos)) {
+    videos = row.videos;
+  } else if (typeof row.videos === 'string') {
+    try {
+      videos = JSON.parse(row.videos);
+    } catch {
+      videos = [];
+    }
+  }
+
   return {
     id: String(row.id),
     name: String(row.name || ''),
@@ -79,6 +90,7 @@ export function rowToProduct(row: any): Product {
     category: String(row.category || 'Living Room'),
     coverImageUrl: String(row.cover_image_url || (images[0]?.url ?? '')),
     images,
+    videos,
     isPublished: row.is_published ?? true,
     isFeatured: row.is_featured ?? false,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
@@ -106,12 +118,20 @@ export async function ensureProductsTable(initialProducts?: Product[]): Promise<
         category VARCHAR(100) NOT NULL DEFAULT 'Living Room',
         cover_image_url TEXT,
         images JSONB NOT NULL DEFAULT '[]'::jsonb,
+        videos JSONB NOT NULL DEFAULT '[]'::jsonb,
         is_published BOOLEAN NOT NULL DEFAULT true,
         is_featured BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `;
+
+    // Safely add videos column to existing products table if not present
+    try {
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS videos JSONB DEFAULT '[]'::jsonb;`;
+    } catch {
+      // Column might already exist
+    }
 
     if (initialProducts && initialProducts.length > 0) {
       const countResult = await sql`SELECT COUNT(*)::int as total FROM products;`;
@@ -121,7 +141,7 @@ export async function ensureProductsTable(initialProducts?: Product[]): Promise<
         for (const p of initialProducts) {
           await sql`
             INSERT INTO products (
-              id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+              id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
             ) VALUES (
               ${p.id},
               ${p.name},
@@ -130,6 +150,7 @@ export async function ensureProductsTable(initialProducts?: Product[]): Promise<
               ${p.category},
               ${p.coverImageUrl || ''},
               ${JSON.stringify(p.images || [])}::jsonb,
+              ${JSON.stringify(p.videos || [])}::jsonb,
               ${p.isPublished !== false},
               ${Boolean(p.isFeatured)},
               ${p.createdAt || new Date().toISOString()},
@@ -167,7 +188,7 @@ export async function getAllProductsFromDb(initialFallbackProducts?: Product[]):
   const sql = getNeonSql();
   try {
     const rows = await sql`
-      SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+      SELECT id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
       FROM products
       ORDER BY created_at DESC;
     `;
@@ -176,7 +197,7 @@ export async function getAllProductsFromDb(initialFallbackProducts?: Product[]):
     if (String(err?.message || err).includes('does not exist') && initialFallbackProducts) {
       await ensureProductsTable(initialFallbackProducts);
       const rows = await sql`
-        SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+        SELECT id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
         FROM products
         ORDER BY created_at DESC;
       `;
@@ -192,7 +213,7 @@ export async function getAllProductsFromDb(initialFallbackProducts?: Product[]):
 export async function getProductByIdFromDb(id: string): Promise<Product | null> {
   const sql = getNeonSql();
   const rows = await sql`
-    SELECT id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+    SELECT id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
     FROM products
     WHERE id = ${id}
     LIMIT 1;
@@ -215,7 +236,7 @@ export async function createProductInDb(
   try {
     const rows = await sql`
       INSERT INTO products (
-        id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+        id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
       ) VALUES (
         ${id},
         ${productData.name},
@@ -224,12 +245,13 @@ export async function createProductInDb(
         ${productData.category || 'Living Room'},
         ${coverImageUrl},
         ${JSON.stringify(productData.images || [])}::jsonb,
+        ${JSON.stringify(productData.videos || [])}::jsonb,
         ${productData.isPublished !== false},
         ${Boolean(productData.isFeatured)},
         ${now},
         ${now}
       )
-      RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
+      RETURNING id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at;
     `;
     return rowToProduct(rows[0]);
   } catch (err: any) {
@@ -237,7 +259,7 @@ export async function createProductInDb(
       await ensureProductsTable();
       const rows = await sql`
         INSERT INTO products (
-          id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+          id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
         ) VALUES (
           ${id},
           ${productData.name},
@@ -246,12 +268,13 @@ export async function createProductInDb(
           ${productData.category || 'Living Room'},
           ${coverImageUrl},
           ${JSON.stringify(productData.images || [])}::jsonb,
+          ${JSON.stringify(productData.videos || [])}::jsonb,
           ${productData.isPublished !== false},
           ${Boolean(productData.isFeatured)},
           ${now},
           ${now}
         )
-        RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
+        RETURNING id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at;
       `;
       return rowToProduct(rows[0]);
     }
@@ -276,6 +299,7 @@ export async function updateProductInDb(
   const category = updates.category !== undefined ? updates.category : existing.category;
   const coverImageUrl = updates.coverImageUrl !== undefined ? updates.coverImageUrl : existing.coverImageUrl;
   const images = updates.images !== undefined ? updates.images : existing.images;
+  const videos = updates.videos !== undefined ? updates.videos : (existing.videos || []);
   const isPublished = updates.isPublished !== undefined ? updates.isPublished : existing.isPublished;
   const isFeatured = updates.isFeatured !== undefined ? updates.isFeatured : existing.isFeatured;
   const now = new Date().toISOString();
@@ -289,11 +313,12 @@ export async function updateProductInDb(
       category = ${category},
       cover_image_url = ${coverImageUrl},
       images = ${JSON.stringify(images)}::jsonb,
+      videos = ${JSON.stringify(videos)}::jsonb,
       is_published = ${isPublished},
       is_featured = ${isFeatured},
       updated_at = ${now}
     WHERE id = ${id}
-    RETURNING id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at;
+    RETURNING id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at;
   `;
 
   if (rows.length === 0) return null;
@@ -319,7 +344,7 @@ export async function resetProductsInDb(initialProducts: Product[]): Promise<Pro
   for (const p of initialProducts) {
     await sql`
       INSERT INTO products (
-        id, name, description, price, category, cover_image_url, images, is_published, is_featured, created_at, updated_at
+        id, name, description, price, category, cover_image_url, images, videos, is_published, is_featured, created_at, updated_at
       ) VALUES (
         ${p.id},
         ${p.name},
@@ -328,6 +353,7 @@ export async function resetProductsInDb(initialProducts: Product[]): Promise<Pro
         ${p.category},
         ${p.coverImageUrl || ''},
         ${JSON.stringify(p.images || [])}::jsonb,
+        ${JSON.stringify(p.videos || [])}::jsonb,
         ${p.isPublished !== false},
         ${Boolean(p.isFeatured)},
         ${p.createdAt || new Date().toISOString()},

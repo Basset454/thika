@@ -22,7 +22,9 @@ import {
   CheckCircle2,
   Armchair,
   Flame,
-  Award
+  Award,
+  Play,
+  Film
 } from 'lucide-react';
 
 interface CustomerStoreProps {
@@ -123,21 +125,55 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
     document.body.style.overflow = 'unset';
   };
 
+  // Build unified media items (images + videos) for the product gallery
+  const activeMediaList = useMemo(() => {
+    if (!activeProduct) return [];
+    const list: Array<{
+      type: 'image' | 'video';
+      id: string;
+      url: string;
+      name?: string;
+      poster?: string;
+    }> = [];
+
+    (activeProduct.images || []).forEach((img, i) => {
+      list.push({
+        type: 'image',
+        id: img.id || `img-${i}`,
+        url: img.url,
+        name: img.name,
+      });
+    });
+
+    (activeProduct.videos || []).forEach((vid, v) => {
+      list.push({
+        type: 'video',
+        id: vid.id || `vid-${v}`,
+        url: vid.url,
+        name: vid.name,
+        poster: activeProduct.coverImageUrl || activeProduct.images?.[0]?.url,
+      });
+    });
+
+    return list;
+  }, [activeProduct]);
+
   // Keyboard navigation for modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!activeProduct) return;
+      const count = activeMediaList.length || 1;
       if (e.key === 'Escape') {
         closeProductModal();
       } else if (e.key === 'ArrowRight') {
-        setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeProduct.images.length - 1));
+        setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : count - 1));
       } else if (e.key === 'ArrowLeft') {
-        setActiveImageIndex((prev) => (prev < activeProduct.images.length - 1 ? prev + 1 : 0));
+        setActiveImageIndex((prev) => (prev < count - 1 ? prev + 1 : 0));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeProduct]);
+  }, [activeProduct, activeMediaList]);
 
   const resetFilters = () => {
     handleCategorySelect('All');
@@ -351,6 +387,14 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                           <span className="tabular-nums">{product.images.length}</span>
                         </span>
                       )}
+
+                      {/* Video Badge */}
+                      {product.videos && product.videos.length > 0 && (
+                        <span className="absolute bottom-3 left-3 bg-[#1E1E1E]/85 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs border border-white/10">
+                          <Play className="w-2.5 h-2.5 fill-[#FF551A] text-[#FF551A]" />
+                          <span>فيديو</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Card Content */}
@@ -540,6 +584,14 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                         </span>
                       )}
 
+                      {/* Video Badge */}
+                      {product.videos && product.videos.length > 0 && (
+                        <span className="absolute bottom-3 left-3 bg-[#1E1E1E]/85 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs border border-white/10">
+                          <Play className="w-2.5 h-2.5 fill-[#FF551A] text-[#FF551A]" />
+                          <span>فيديو</span>
+                        </span>
+                      )}
+
                       {/* Hover Overlay */}
                       <div className="absolute inset-0 bg-[#1E1E1E]/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <span className="bg-white/95 text-[#1E1E1E] text-xs font-bold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-1.5">
@@ -696,29 +748,65 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2">
               
-              {/* Image Gallery Column */}
+              {/* Media Gallery Column (Images & Video Player) */}
               <div className="p-6 bg-neutral-50 border-b md:border-b-0 md:border-l border-neutral-200 flex flex-col justify-between">
                 <div>
-                  {/* Primary Large Image */}
-                  <div className="relative aspect-[4/3] w-full rounded-2xl overflow-hidden bg-[#F6F5F2] border border-neutral-200/90 shadow-xs">
-                    <img
-                      src={activeProduct.images[activeImageIndex]?.url || activeProduct.images[0]?.url}
-                      alt={activeProduct.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover transition-all duration-300"
-                    />
+                  {/* Primary Media Stage */}
+                  <div className="relative aspect-[4/3] w-full rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-200/90 shadow-xs flex items-center justify-center">
+                    {(() => {
+                      const currentMedia = activeMediaList[activeImageIndex] || activeMediaList[0];
+                      if (!currentMedia) {
+                        return (
+                          <img
+                            src={activeProduct.coverImageUrl}
+                            alt={activeProduct.name}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                        );
+                      }
 
-                    {/* Arrow Navigation inside image */}
-                    {activeProduct.images.length > 1 && (
-                      <div className="absolute inset-y-0 inset-x-2 flex items-center justify-between pointer-events-none">
+                      if (currentMedia.type === 'video') {
+                        return (
+                          <div className="w-full h-full relative flex items-center justify-center bg-black">
+                            <video
+                              key={currentMedia.url}
+                              src={currentMedia.url}
+                              poster={currentMedia.poster}
+                              controls
+                              playsInline
+                              preload="metadata"
+                              className="w-full h-full object-contain"
+                            />
+                            <div className="absolute top-3 right-3 bg-[#FF551A] text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md pointer-events-none">
+                              <Play className="w-3 h-3 fill-white" />
+                              <span>فيديو استعراض القطعة</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <img
+                          src={currentMedia.url}
+                          alt={activeProduct.name}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover transition-all duration-300"
+                        />
+                      );
+                    })()}
+
+                    {/* Arrow Navigation inside media */}
+                    {activeMediaList.length > 1 && (
+                      <div className="absolute inset-y-0 inset-x-2 flex items-center justify-between pointer-events-none z-10">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setActiveImageIndex((prev) => (prev < activeProduct.images.length - 1 ? prev + 1 : 0));
+                            setActiveImageIndex((prev) => (prev < activeMediaList.length - 1 ? prev + 1 : 0));
                           }}
                           className="pointer-events-auto p-1.5 rounded-full bg-white/85 hover:bg-white text-neutral-800 shadow-md transition-colors cursor-pointer"
-                          aria-label="الصورة السابقة"
+                          aria-label="السابق"
                         >
                           <ChevronRight className="w-4 h-4" />
                         </button>
@@ -726,10 +814,10 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeProduct.images.length - 1));
+                            setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeMediaList.length - 1));
                           }}
                           className="pointer-events-auto p-1.5 rounded-full bg-white/85 hover:bg-white text-neutral-800 shadow-md transition-colors cursor-pointer"
-                          aria-label="الصورة التالية"
+                          aria-label="التالي"
                         >
                           <ChevronLeft className="w-4 h-4" />
                         </button>
@@ -737,26 +825,47 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                     )}
                   </div>
 
-                  {/* Thumbnail Row */}
-                  {activeProduct.images.length > 1 && (
+                  {/* Thumbnail Row (Images and Videos) */}
+                  {activeMediaList.length > 1 && (
                     <div className="flex items-center gap-2.5 mt-3.5 overflow-x-auto pb-1 scrollbar-none">
-                      {activeProduct.images.map((img, idx) => (
+                      {activeMediaList.map((item, idx) => (
                         <button
-                          key={img.id || idx}
+                          key={item.id || idx}
                           onClick={() => setActiveImageIndex(idx)}
                           className={`relative w-16 h-14 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
                             activeImageIndex === idx
                               ? 'border-[#FF551A] ring-2 ring-[#FF551A]/20 scale-102'
                               : 'border-neutral-200 hover:border-neutral-300 opacity-70 hover:opacity-100'
                           }`}
-                          aria-label={`عرض الصورة ${idx + 1}`}
+                          aria-label={item.type === 'video' ? `عرض الفيديو ${idx + 1}` : `عرض الصورة ${idx + 1}`}
                         >
-                          <img
-                            src={img.url}
-                            alt=""
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                          />
+                          {item.type === 'video' ? (
+                            <div className="w-full h-full bg-neutral-900 flex flex-col items-center justify-center text-white relative">
+                              {item.poster && (
+                                <img
+                                  src={item.poster}
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover opacity-50"
+                                />
+                              )}
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                <div className="w-6 h-6 rounded-full bg-[#FF551A] text-white flex items-center justify-center shadow-xs">
+                                  <Play className="w-3 h-3 fill-white" />
+                                </div>
+                              </div>
+                              <span className="absolute bottom-0.5 right-1 text-[8px] font-bold text-white uppercase tracking-tighter">
+                                فيديو
+                              </span>
+                            </div>
+                          ) : (
+                            <img
+                              src={item.url}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </button>
                       ))}
                     </div>
