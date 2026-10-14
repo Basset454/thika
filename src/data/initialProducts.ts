@@ -9,18 +9,18 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Living Room',
     isPublished: true,
     isFeatured: true,
-    coverImageUrl: 'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=1000&auto=format&fit=crop&q=80',
+    coverImageUrl: 'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=800&auto=format&fit=crop&q=80&fm=webp',
     images: [
       {
         id: 'img-f1-1',
-        url: 'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=1000&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=800&auto=format&fit=crop&q=80&fm=webp',
         name: 'nordic_oak_chair.jpg',
         isCover: true,
         uploadedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
       },
       {
         id: 'img-f1-2',
-        url: 'https://images.unsplash.com/photo-1580481077195-c3a821a506cb?w=1000&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1580481077195-c3a821a506cb?w=800&auto=format&fit=crop&q=80&fm=webp',
         name: 'nordic_chair_detail.jpg',
         isCover: false,
         uploadedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
@@ -37,11 +37,11 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Dining Room',
     isPublished: true,
     isFeatured: false,
-    coverImageUrl: 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=1000&auto=format&fit=crop&q=80',
+    coverImageUrl: 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=800&auto=format&fit=crop&q=80&fm=webp',
     images: [
       {
         id: 'img-f2-1',
-        url: 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=1000&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=800&auto=format&fit=crop&q=80&fm=webp',
         name: 'walnut_dining_table.jpg',
         isCover: true,
         uploadedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
@@ -58,11 +58,11 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Living Room',
     isPublished: true,
     isFeatured: true,
-    coverImageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1000&auto=format&fit=crop&q=80',
+    coverImageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&auto=format&fit=crop&q=80&fm=webp',
     images: [
       {
         id: 'img-f3-1',
-        url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1000&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&auto=format&fit=crop&q=80&fm=webp',
         name: 'boucle_sofa.jpg',
         isCover: true,
         uploadedAt: new Date(Date.now() - 86400000).toISOString(),
@@ -79,11 +79,11 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Office',
     isPublished: true,
     isFeatured: false,
-    coverImageUrl: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=1000&auto=format&fit=crop&q=80',
+    coverImageUrl: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=800&auto=format&fit=crop&q=80&fm=webp',
     images: [
       {
         id: 'img-f4-1',
-        url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=1000&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=800&auto=format&fit=crop&q=80&fm=webp',
         name: 'architect_desk.jpg',
         isCover: true,
         uploadedAt: new Date(Date.now() - 86400000).toISOString(),

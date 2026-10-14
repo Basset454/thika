@@ -15,6 +15,11 @@ export const LogoMark: React.FC<LogoMarkProps> = ({ className = "w-10 h-10", siz
         src="https://js5vhhxkv7b7mmcq.public.blob.vercel-storage.com/454620827_501342975777167_8758272364689496478_n%20%281%29.jpg"
         alt="شعار أثاث الثقة"
         className="w-full h-full object-contain"
+        width={size || 40}
+        height={size || 40}
+        loading="eager"
+        // @ts-expect-error fetchpriority standard attribute
+        fetchpriority="high"
         onError={(e) => {
           // Fallback if image not found
           (e.currentTarget as HTMLElement).style.display = 'none';

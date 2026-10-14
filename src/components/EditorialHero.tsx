@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, StoreSettings } from '../types';
 import { ChevronLeft, MapPin, Eye, ArrowDown } from 'lucide-react';
+import { OptimizedImage } from './OptimizedImage';
+import { HERO_IMAGE_SIZES } from '../utils/imageOptimizer';
 
 interface EditorialHeroProps {
   onExploreCatalog: () => void;
@@ -285,11 +287,14 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
           {/* High-Quality Visual Showcase Column with Hero Parallax */}
           <div className="lg:col-span-6">
             <div className="relative rounded-3xl overflow-hidden bg-neutral-100 border border-neutral-200/80 shadow-xl group aspect-[4/3] sm:aspect-[16/11]">
-              <img
+              <OptimizedImage
                 src={heroImage}
                 alt="أثاث صالون عصري فاخر من تشكيلة أثاث الثقة"
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-103"
+                targetWidth={1000}
+                widthsForSrcSet={[640, 960, 1200, 1600]}
+                sizes={HERO_IMAGE_SIZES}
+                aspectRatio="aspect-[4/3] sm:aspect-[16/11]"
+                className="group-hover:scale-103 transition-transform duration-700 ease-out"
                 style={{
                   transform: prefersReducedMotion
                     ? undefined

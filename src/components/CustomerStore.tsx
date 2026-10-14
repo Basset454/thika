@@ -31,6 +31,8 @@ import {
 } from 'lucide-react';
 
 import { getEffectiveCategoryImage, getDefaultCategoryImage } from '../utils/categoryDefaults';
+import { OptimizedImage } from './OptimizedImage';
+import { CARD_GRID_IMAGE_SIZES } from '../utils/imageOptimizer';
 
 interface CustomerStoreProps {
   products: Product[];
@@ -353,15 +355,16 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                 style={{ transitionDelay: `${index * 85}ms` }}
               >
                 <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100 reveal-image-curtain">
-                  <img
+                  <OptimizedImage
                     src={cat.image}
+                    fallbackSrc={getDefaultCategoryImage(cat.id)}
                     alt={cat.nameAr}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                    targetWidth={500}
+                    widthsForSrcSet={[280, 400, 600]}
+                    sizes={CARD_GRID_IMAGE_SIZES}
+                    aspectRatio="aspect-[4/3]"
+                    className="group-hover:scale-105 transition-transform duration-500 ease-out"
                     loading="lazy"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = getDefaultCategoryImage(cat.id);
-                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
@@ -614,11 +617,13 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                       const currentMedia = activeMediaList[activeImageIndex] || activeMediaList[0];
                       if (!currentMedia) {
                         return (
-                          <img
+                          <OptimizedImage
                             src={activeProduct.coverImageUrl}
                             alt={activeProduct.name}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
+                            targetWidth={900}
+                            widthsForSrcSet={[480, 720, 1080]}
+                            aspectRatio="aspect-[4/3]"
+                            loading="eager"
                           />
                         );
                       }
@@ -644,11 +649,13 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                       }
 
                       return (
-                        <img
+                        <OptimizedImage
                           src={currentMedia.url}
                           alt={activeProduct.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover transition-all duration-300"
+                          targetWidth={900}
+                          widthsForSrcSet={[480, 720, 1080]}
+                          aspectRatio="aspect-[4/3]"
+                          loading="eager"
                         />
                       );
                     })()}
@@ -699,11 +706,12 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                           {item.type === 'video' ? (
                             <div className="w-full h-full bg-neutral-900 flex flex-col items-center justify-center text-white relative">
                               {item.poster && (
-                                <img
+                                <OptimizedImage
                                   src={item.poster}
                                   alt=""
-                                  referrerPolicy="no-referrer"
-                                  className="w-full h-full object-cover opacity-50"
+                                  targetWidth={150}
+                                  aspectRatio="aspect-square"
+                                  className="opacity-50"
                                 />
                               )}
                               <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -716,11 +724,12 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                               </span>
                             </div>
                           ) : (
-                            <img
+                            <OptimizedImage
                               src={item.url}
                               alt=""
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover"
+                              targetWidth={150}
+                              aspectRatio="aspect-square"
+                              loading="lazy"
                             />
                           )}
                         </button>

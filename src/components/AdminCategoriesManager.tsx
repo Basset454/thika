@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Category, Product } from '../types';
 import { getCategories, createCategory, updateCategory, deleteCategory, uploadImageFiles } from '../services/api';
 import { getEffectiveCategoryImage, getDefaultCategoryImage } from '../utils/categoryDefaults';
+import { OptimizedImage } from './OptimizedImage';
 import { 
   Layers, 
   Plus, 
@@ -356,13 +357,13 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                         {/* Thumbnail Image */}
                         <td className="py-3.5 px-6">
                           <div className="w-12 h-12 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 shrink-0">
-                            <img
+                            <OptimizedImage
                               src={effectiveImg}
+                              fallbackSrc={getDefaultCategoryImage(cat.id)}
                               alt={cat.nameAr}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src = getDefaultCategoryImage(cat.id);
-                              }}
+                              targetWidth={150}
+                              aspectRatio="aspect-square"
+                              loading="lazy"
                             />
                           </div>
                         </td>
@@ -516,13 +517,12 @@ export const AdminCategoriesManager: React.FC<AdminCategoriesManagerProps> = ({
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   {/* Image preview box */}
                   <div className="relative w-28 h-24 rounded-2xl overflow-hidden border border-neutral-300 shadow-xs shrink-0 bg-neutral-200">
-                    <img
+                    <OptimizedImage
                       src={formImageUrl || getDefaultCategoryImage(formNameEn || formNameAr || editingCategory?.id)}
+                      fallbackSrc={getDefaultCategoryImage(formNameEn || formNameAr)}
                       alt="معاينة صورة التصنيف"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = getDefaultCategoryImage(formNameEn || formNameAr);
-                      }}
+                      targetWidth={300}
+                      aspectRatio="aspect-[4/3]"
                     />
                     {isUploadingImage && (
                       <div className="absolute inset-0 bg-neutral-900/60 flex items-center justify-center">

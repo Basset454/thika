@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ProductImage, ProductVideo } from '../types';
 import { uploadImageFiles, uploadVideoFiles, deleteImageFile } from '../services/api';
+import { OptimizedImage } from './OptimizedImage';
 
 interface AdminImageUploaderProps {
   images: ProductImage[];
@@ -490,11 +491,12 @@ export const AdminImageUploader: React.FC<AdminImageUploaderProps> = ({
 
                   {/* Thumbnail Image */}
                   <div className="aspect-[4/3] relative overflow-hidden bg-neutral-100">
-                    <img
+                    <OptimizedImage
                       src={img.url}
                       alt={img.name || `صورة ${idx + 1}`}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
+                      targetWidth={250}
+                      aspectRatio="aspect-[4/3]"
+                      loading="lazy"
                     />
 
                     {/* Quick Reorder Overlay on Hover */}

@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Product } from '../types';
 import { getProductPricing } from '../data/initialProducts';
 import { ChevronLeft, Eye, Play, Layers } from 'lucide-react';
+import { OptimizedImage } from './OptimizedImage';
+import { PRODUCT_GRID_IMAGE_SIZES } from '../utils/imageOptimizer';
 
 interface ProductCardProps {
   product: Product;
@@ -42,11 +44,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       {/* Product Image Area with Stable Display & Thumbnail Selectors */}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
-        <img
-          src={currentImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
+        <OptimizedImage
+          src={currentImage?.url}
           alt={product.name}
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-104"
+          targetWidth={600}
+          widthsForSrcSet={[320, 480, 640, 800]}
+          sizes={PRODUCT_GRID_IMAGE_SIZES}
+          aspectRatio="aspect-[4/3]"
+          className="group-hover:scale-104 transition-transform duration-500 ease-out"
           loading="lazy"
         />
 

@@ -10,6 +10,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { TrustStandardsSection, TrustStandardItem, Product } from '../types';
+import { OptimizedImage } from './OptimizedImage';
 
 interface ArchitecturalMaterialsSectionProps {
   standards?: TrustStandardsSection | null;
@@ -124,12 +125,14 @@ export const ArchitecturalMaterialsSection: React.FC<ArchitecturalMaterialsSecti
           <div className="lg:col-span-7">
             <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-neutral-900 border border-neutral-200 shadow-lg group aspect-[4/3] sm:aspect-[16/11]">
               {activeItem?.image ? (
-                <img
+                <OptimizedImage
                   key={activeItem.id}
                   src={activeItem.image}
                   alt={activeItem.title}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-104 reveal-image-curtain is-revealed"
+                  targetWidth={800}
+                  widthsForSrcSet={[480, 720, 960]}
+                  aspectRatio="aspect-[4/3] sm:aspect-[16/11]"
+                  className="group-hover:scale-104 transition-transform duration-700 ease-out"
                   loading="lazy"
                 />
               ) : (

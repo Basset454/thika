@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Product } from '../types';
 import { formatDZD } from '../data/initialProducts';
 import { ChevronLeft, ArrowDown, Sparkles, Layers, Eye } from 'lucide-react';
+import { OptimizedImage } from './OptimizedImage';
 
 interface CinematicStoryStageProps {
   products: Product[];
@@ -227,12 +228,12 @@ export const CinematicStoryStage: React.FC<CinematicStoryStageProps> = ({
                 zIndex: 10,
               }}
             >
-              <img
+              <OptimizedImage
                 src={scene1Image}
                 alt="صالون معيشة معاصر فاخر بأقمشة بوكليه"
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
-                loading="eager"
+                targetWidth={1000}
+                widthsForSrcSet={[640, 960, 1200]}
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
 
@@ -292,11 +293,11 @@ export const CinematicStoryStage: React.FC<CinematicStoryStageProps> = ({
             >
               {/* Overlapping container with architectural border & deep elevation */}
               <div className="relative w-full h-full overflow-hidden rounded-r-3xl border-r-2 border-y-2 border-white/20 shadow-[-25px_0_60px_rgba(0,0,0,0.8)] bg-neutral-900">
-                <img
+                <OptimizedImage
                   src={scene2Image}
                   alt="غرفة طعام خشبية فاخرة من خشب الجوز الأمريكي"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
+                  targetWidth={1000}
+                  widthsForSrcSet={[640, 960, 1200]}
                   loading="lazy"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
