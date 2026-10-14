@@ -1,4 +1,4 @@
-import { checkNeonHealth, isNeonConfigured, getDatabaseUrl } from './_db.js';
+import { checkNeonHealth, isNeonConfigured, getDatabaseUrl } from '../_db.js';
 
 export default async function handler(req: any, res: any) {
   if (res?.setHeader) {

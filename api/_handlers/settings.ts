@@ -7,7 +7,7 @@ import {
   updateStoreSettingsInDb,
   DEFAULT_STORE_SETTINGS,
   StoreSettingsRecord,
-} from './_db.js';
+} from '../_db.js';
 
 function loadLocalDiskSettings(): StoreSettingsRecord {
   try {

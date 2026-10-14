@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { Product, ProductImage, ProductVideo } from './products.js';
+import { Product, ProductImage, ProductVideo } from './_handlers/products.js';
 
 export interface CategoryRecord {
   id: string;

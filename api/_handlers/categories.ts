@@ -11,7 +11,7 @@ import {
   getAllProductsFromDb,
   INITIAL_CATEGORIES,
   CategoryRecord,
-} from './_db.js';
+} from '../_db.js';
 
 function loadLocalDiskCategories(): CategoryRecord[] {
   try {

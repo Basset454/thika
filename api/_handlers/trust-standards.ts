@@ -7,7 +7,7 @@ import {
   updateTrustStandardsInDb,
   DEFAULT_TRUST_STANDARDS,
   TrustStandardsRecord,
-} from './_db.js';
+} from '../_db.js';
 
 function loadLocalDiskTrustStandards(): TrustStandardsRecord {
   try {

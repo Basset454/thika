@@ -10,7 +10,7 @@ import {
   deleteProductFromDb, 
   resetProductsInDb,
   initDatabase 
-} from './_db.js';
+} from '../_db.js';
 
 export interface ProductImage {
   id: string;
