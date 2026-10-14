@@ -19,16 +19,26 @@ import {
   ChevronLeft,
   Database,
   Server,
-  KeyRound
+  KeyRound,
+  Archive,
+  ArchiveRestore,
+  Tag,
+  Sliders,
+  DollarSign,
+  Percent
 } from 'lucide-react';
-import { Product, BlobStatus, DatabaseStatus } from '../types';
+import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings } from '../types';
 import { AdminProductForm } from './AdminProductForm';
+import { AdminCategoriesManager } from './AdminCategoriesManager';
+import { AdminStorefrontSettings } from './AdminStorefrontSettings';
 import { getCustomBlobToken, setCustomBlobToken, changeAdminPassword } from '../services/api';
-import { formatDZD, ARABIC_CATEGORIES } from '../data/initialProducts';
+import { formatDZD, ARABIC_CATEGORIES, getProductPricing } from '../data/initialProducts';
 
 interface AdminPanelProps {
   products: Product[];
-  currentAdminSubpath: string; // e.g. '/admin/products', '/admin/products/new', '/admin/products/:id/edit'
+  categories?: Category[];
+  settings?: StoreSettings | null;
+  currentAdminSubpath: string; // e.g. '/admin/products', '/admin/categories', '/admin/storefront', '/admin/products/new', '/admin/products/:id/edit'
   navigateAdmin: (path: string) => void;
   onAddProduct: (product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onUpdateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
@@ -39,10 +49,15 @@ interface AdminPanelProps {
   onRefreshBlobStatus: () => Promise<void>;
   dbStatus?: DatabaseStatus | null;
   onRefreshDbStatus?: () => Promise<void>;
+  onCategoriesUpdated?: (categories: Category[]) => void;
+  onSettingsUpdated?: (settings: StoreSettings) => void;
+  showToast: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   products,
+  categories = [],
+  settings = null,
   currentAdminSubpath,
   navigateAdmin,
   onAddProduct,
@@ -54,6 +69,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onRefreshBlobStatus,
   dbStatus,
   onRefreshDbStatus,
+  onCategoriesUpdated,
+  onSettingsUpdated,
+  showToast,
 }) => {
   const [isTokenSettingsOpen, setIsTokenSettingsOpen] = useState(false);
   const [tokenInput, setTokenInput] = useState(getCustomBlobToken());
@@ -68,18 +86,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Search & Filter in Admin Products List
   const [searchFilter, setSearchFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'archived' | 'discounted'>('all');
 
   // Determine current view
+  const isCategoriesView = currentAdminSubpath === '/admin/categories';
+  const isStorefrontView = currentAdminSubpath === '/admin/storefront';
   const isNewView = currentAdminSubpath === '/admin/products/new';
   const isEditView = currentAdminSubpath.includes('/edit');
   const editingId = isEditView ? currentAdminSubpath.split('/')[3] : null;
   const productToEdit = editingId ? products.find((p) => p.id === editingId) || null : null;
 
-  // Real data calculations (honest metrics)
+  // Real data calculations
   const totalCount = products.length;
-  const publishedCount = useMemo(() => products.filter((p) => p.isPublished !== false).length, [products]);
-  const featuredCount = useMemo(() => products.filter((p) => p.isFeatured).length, [products]);
-  const missingImagesCount = useMemo(() => products.filter((p) => !p.images || p.images.length === 0).length, [products]);
+  const activeProducts = useMemo(() => products.filter((p) => !p.isArchived), [products]);
+  const publishedCount = useMemo(() => activeProducts.filter((p) => p.isPublished !== false).length, [activeProducts]);
+  const archivedCount = useMemo(() => products.filter((p) => p.isArchived).length, [products]);
+  const featuredCount = useMemo(() => activeProducts.filter((p) => p.isFeatured).length, [activeProducts]);
+  const discountedCount = useMemo(() => activeProducts.filter((p) => p.discountActive).length, [activeProducts]);
 
   // Filtered products list
   const filteredProducts = useMemo(() => {
@@ -87,22 +110,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const matchesSearch =
         searchFilter.trim() === '' ||
         p.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchFilter.toLowerCase());
+        p.description.toLowerCase().includes(searchFilter.toLowerCase()) ||
+        (p.materials && p.materials.toLowerCase().includes(searchFilter.toLowerCase()));
 
       const matchesCat =
         categoryFilter === 'All' ||
-        p.category === categoryFilter;
+        p.category === categoryFilter ||
+        (p.category && p.category.toLowerCase() === categoryFilter.toLowerCase());
 
-      return matchesSearch && matchesCat;
+      let matchesStatus = true;
+      if (statusFilter === 'published') {
+        matchesStatus = p.isPublished !== false && !p.isArchived;
+      } else if (statusFilter === 'draft') {
+        matchesStatus = p.isPublished === false && !p.isArchived;
+      } else if (statusFilter === 'archived') {
+        matchesStatus = Boolean(p.isArchived);
+      } else if (statusFilter === 'discounted') {
+        matchesStatus = Boolean(p.discountActive) && !p.isArchived;
+      }
+
+      return matchesSearch && matchesCat && matchesStatus;
     });
-  }, [products, searchFilter, categoryFilter]);
+  }, [products, searchFilter, categoryFilter, statusFilter]);
 
   const handleTogglePublish = async (product: Product) => {
-    await onUpdateProduct(product.id, { isPublished: !product.isPublished });
+    const nextState = !product.isPublished;
+    await onUpdateProduct(product.id, { isPublished: nextState });
+    showToast(nextState ? `تم نشر القطعة "${product.name}" في المتجر.` : `تم تحويل القطعة "${product.name}" إلى مسودة.`);
   };
 
   const handleToggleFeatured = async (product: Product) => {
-    await onUpdateProduct(product.id, { isFeatured: !product.isFeatured });
+    const nextState = !product.isFeatured;
+    await onUpdateProduct(product.id, { isFeatured: nextState });
+    showToast(nextState ? `تمت إضافة "${product.name}" إلى التشكيلة المميزة.` : `تمت إزالة "${product.name}" من التشكيلة المميزة.`);
+  };
+
+  const handleToggleArchive = async (product: Product) => {
+    const nextState = !product.isArchived;
+    await onUpdateProduct(product.id, { isArchived: nextState });
+    showToast(nextState ? `تمت أرشفة "${product.name}" وإخفاؤها من المتجر.` : `تمت استعادة "${product.name}" من الأرشيف بنجاح.`);
   };
 
   const handleSaveToken = async (e: React.FormEvent) => {
@@ -155,7 +201,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs uppercase tracking-widest font-bold text-neutral-400">
-                لوحة تحكم المشرف
+                لوحة تحكم المتجر
               </span>
               <span className="text-neutral-600">·</span>
               <span className={`text-xs font-semibold flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border ${
@@ -166,19 +212,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   : 'text-neutral-300 bg-neutral-900 border-neutral-700'
               }`}>
                 <Database className="w-3.5 h-3.5 text-cyan-400" />
-                <span>{dbStatus?.connected ? 'Neon PostgreSQL (متصل)' : 'قاعدة بيانات Neon'}</span>
+                <span>{dbStatus?.connected ? 'قاعدة بيانات Neon (متصل)' : 'قاعدة بيانات Neon'}</span>
               </span>
               <span className="text-neutral-600">·</span>
               <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5 bg-emerald-950/60 px-2.5 py-0.5 rounded-lg border border-emerald-800">
                 <Cloud className="w-3.5 h-3.5 text-emerald-400" />
-                <span>صور Vercel Blob</span>
+                <span>تخزين الصور Vercel Blob</span>
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white">
               إدارة متجر أثاث الثقة
             </h1>
             <p className="text-xs text-neutral-400">
-              قاعدة بيانات Neon وتخزين الصور الدائم عبر Vercel Blob
+              تحكم متكامل في المنتجات، التصنيفات، الأسعار والتخفيضات، وصورة الواجهة الرئيسية
             </p>
           </div>
 
@@ -230,10 +276,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* Admin Navigation Tabs */}
         <div className="pt-4 border-t border-neutral-800 flex flex-wrap items-center gap-2">
+          
+          {/* Tab 1: Products */}
           <button
             onClick={() => navigateAdmin('/admin/products')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              !isNewView && !isEditView
+              !isNewView && !isEditView && !isCategoriesView && !isStorefrontView
                 ? 'bg-white text-[#1E1E1E] shadow-sm'
                 : 'bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700'
             }`}
@@ -242,6 +290,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <span>قائمة المنتجات ({totalCount})</span>
           </button>
 
+          {/* Tab 2: Categories */}
+          <button
+            onClick={() => navigateAdmin('/admin/categories')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isCategoriesView
+                ? 'bg-[#FF551A] text-white shadow-sm'
+                : 'bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>التصنيفات ({categories.length || 5})</span>
+          </button>
+
+          {/* Tab 3: Storefront / Hero */}
+          <button
+            onClick={() => navigateAdmin('/admin/storefront')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              isStorefrontView
+                ? 'bg-[#FF551A] text-white shadow-sm'
+                : 'bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>واجهة المتجر والهيدر</span>
+          </button>
+
+          {/* Tab 4: Add Product */}
           <button
             onClick={() => navigateAdmin('/admin/products/new')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -259,41 +334,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* =========================================================================
           HONEST METRICS DASHBOARD (Real Data Only!)
           ========================================================================= */}
-      {!isNewView && !isEditView && (
+      {!isNewView && !isEditView && !isCategoriesView && !isStorefrontView && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
             <span className="text-xs text-neutral-500 font-semibold block">إجمالي المنتجات</span>
             <span className="text-2xl font-bold text-[#1E1E1E] tabular-nums block">
               {totalCount}
             </span>
-            <span className="text-[11px] text-neutral-400 block">مسجلة في قاعدة البيانات</span>
+            <span className="text-[11px] text-neutral-400 block">{archivedCount > 0 ? `${archivedCount} قطعة بالأرشيف` : 'جميع القطع نشطة'}</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
-            <span className="text-xs text-neutral-500 font-semibold block">القطع المنشورة</span>
+            <span className="text-xs text-neutral-500 font-semibold block">القطع المعروضة</span>
             <span className="text-2xl font-bold text-emerald-700 tabular-nums block">
               {publishedCount}
             </span>
-            <span className="text-[11px] text-neutral-400 block">معروضة للزبائن بالمتجر</span>
+            <span className="text-[11px] text-neutral-400 block">ظاهرة للزبائن في المتجر</span>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
+            <span className="text-xs text-neutral-500 font-semibold block">تخفيضات نشطة</span>
+            <span className="text-2xl font-bold text-[#FF551A] tabular-nums block">
+              {discountedCount}
+            </span>
+            <span className="text-[11px] text-neutral-400 block">قطع عليها خصم فعّال</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
             <span className="text-xs text-neutral-500 font-semibold block">القطع المميزة</span>
-            <span className="text-2xl font-bold text-[#FF551A] tabular-nums block">
+            <span className="text-2xl font-bold text-[#1E1E1E] tabular-nums block">
               {featuredCount}
             </span>
-            <span className="text-[11px] text-neutral-400 block">محددة كقطع مميزة</span>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs space-y-1">
-            <span className="text-xs text-neutral-500 font-semibold block">تخزين الصور Vercel Blob</span>
-            <span className="text-sm font-bold text-[#1E1E1E] flex items-center gap-1.5 pt-1">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>test23-blob نشط</span>
-            </span>
-            <span className="text-[11px] text-neutral-400 block">
-              {missingImagesCount === 0 ? 'جميع المنتجات لديها صور' : `${missingImagesCount} منتجات بدون صور`}
-            </span>
+            <span className="text-[11px] text-neutral-400 block">في الواجهة الرئيسية</span>
           </div>
         </div>
       )}
@@ -304,6 +376,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {isNewView && (
         <AdminProductForm
           initialProduct={null}
+          categories={categories}
           onSave={async (data) => {
             await onAddProduct(data);
             navigateAdmin('/admin/products');
@@ -318,6 +391,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {isEditView && (
         <AdminProductForm
           initialProduct={productToEdit}
+          categories={categories}
           onSave={async (data) => {
             if (editingId) {
               await onUpdateProduct(editingId, data);
@@ -329,9 +403,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* =========================================================================
-          VIEW 3: PRODUCTS LIST & CATALOG TABLE (/admin/products)
+          VIEW 3: CATEGORIES MANAGER (/admin/categories)
           ========================================================================= */}
-      {!isNewView && !isEditView && (
+      {isCategoriesView && (
+        <AdminCategoriesManager
+          products={products}
+          onCategoriesUpdated={onCategoriesUpdated}
+          showToast={showToast}
+        />
+      )}
+
+      {/* =========================================================================
+          VIEW 4: STOREFRONT & HERO SETTINGS (/admin/storefront)
+          ========================================================================= */}
+      {isStorefrontView && (
+        <AdminStorefrontSettings
+          onSettingsUpdated={onSettingsUpdated}
+          showToast={showToast}
+        />
+      )}
+
+      {/* =========================================================================
+          VIEW 5: PRODUCTS LIST & CATALOG TABLE (/admin/products)
+          ========================================================================= */}
+      {!isNewView && !isEditView && !isCategoriesView && !isStorefrontView && (
         <div className="bg-white rounded-3xl border border-neutral-200 shadow-xs overflow-hidden space-y-4">
           
           {/* Table Header & Search Controls */}
@@ -341,7 +436,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 قائمة المنتجات ({filteredProducts.length})
               </h2>
               <p className="text-xs text-neutral-500 mt-0.5">
-                يمكنك تعديل الأسعار، نشر/إلغاء نشر القطع، أو تحديث الصور من هنا
+                يمكنك تعديل الأسعار، نشر/أرشفة القطع، أو تحديث الصور ومقاطع الفيديو
               </p>
             </div>
 
@@ -353,10 +448,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="بحث في المنتجات..."
+                  placeholder="بحث بالاسم أو الخامة..."
                   className="w-full pr-9 pl-3 py-2 text-xs rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-[#FF551A]"
                 />
               </div>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e: any) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 text-xs rounded-xl border border-neutral-200 text-neutral-700 focus:outline-none focus:ring-2 focus:ring-[#FF551A] bg-white cursor-pointer"
+              >
+                <option value="all">جميع الحالات</option>
+                <option value="published">القطع المعروضة</option>
+                <option value="draft">المسودات</option>
+                <option value="discounted">عليها تخفيض</option>
+                <option value="archived">المؤرشفة</option>
+              </select>
 
               {/* Category Filter */}
               <select
@@ -365,44 +473,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="px-3 py-2 text-xs rounded-xl border border-neutral-200 text-neutral-700 focus:outline-none focus:ring-2 focus:ring-[#FF551A] bg-white cursor-pointer"
               >
                 <option value="All">جميع التصنيفات</option>
-                {ARABIC_CATEGORIES.filter((c) => c.id !== 'All').map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nameAr}
-                  </option>
-                ))}
+                {categories.length > 0
+                  ? categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.nameAr}
+                      </option>
+                    ))
+                  : ARABIC_CATEGORIES.filter((c) => c.id !== 'All').map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.nameAr}
+                      </option>
+                    ))}
               </select>
-
-              {/* Add Product Button */}
-              <button
-                onClick={() => navigateAdmin('/admin/products/new')}
-                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#FF551A] hover:bg-[#E04814] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0"
-              >
-                <PackagePlus className="w-3.5 h-3.5" />
-                <span>إضافة منتج</span>
-              </button>
             </div>
           </div>
 
-          {/* Table Contents */}
+          {/* Table */}
           {filteredProducts.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs sm:text-sm">
-                <thead className="bg-neutral-50 border-b border-neutral-200 text-neutral-600 font-bold text-[11px]">
+              <table className="w-full text-right text-sm">
+                <thead className="bg-[#F8F8F7] text-neutral-600 text-xs uppercase border-b border-neutral-200">
                   <tr>
-                    <th className="py-3.5 px-6">الصورة</th>
-                    <th className="py-3.5 px-6">اسم القطعة</th>
-                    <th className="py-3.5 px-6">التصنيف</th>
-                    <th className="py-3.5 px-6">السعر المقدر</th>
-                    <th className="py-3.5 px-6">حالة النشر</th>
-                    <th className="py-3.5 px-6">مميز</th>
-                    <th className="py-3.5 px-6 text-left">إجراءات</th>
+                    <th className="py-3 px-6 font-bold">الوسائط</th>
+                    <th className="py-3 px-6 font-bold">اسم القطعة والمواصفات</th>
+                    <th className="py-3 px-6 font-bold">التصنيف</th>
+                    <th className="py-3 px-6 font-bold">السعر والتخفيض</th>
+                    <th className="py-3 px-6 font-bold">حالة النشر</th>
+                    <th className="py-3 px-6 font-bold">الأرشيف</th>
+                    <th className="py-3 px-6 font-bold">مميز</th>
+                    <th className="py-3 px-6 font-bold text-left">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {filteredProducts.map((prod) => {
                     const coverImg = prod.images.find((i) => i.isCover) || prod.images[0];
+                    const pricing = getProductPricing(prod);
+
                     return (
-                      <tr key={prod.id} className="hover:bg-neutral-50/70 transition-colors">
+                      <tr
+                        key={prod.id}
+                        className={`hover:bg-neutral-50/70 transition-colors ${
+                          prod.isArchived ? 'bg-neutral-50/80 opacity-75' : ''
+                        }`}
+                      >
                         
                         {/* Image Thumbnail */}
                         <td className="py-3 px-6">
@@ -435,14 +548,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </div>
                         </td>
 
-                        {/* Name & Description */}
+                        {/* Name, Dimensions, Materials */}
                         <td className="py-3 px-6 font-medium text-[#1E1E1E]">
-                          <span className="block font-bold text-sm text-[#1E1E1E]">
-                            {prod.name}
-                          </span>
-                          <span className="text-[11px] text-neutral-500 line-clamp-1 max-w-xs">
-                            {prod.description || 'لا يوجد وصف.'}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-sm text-[#1E1E1E]">
+                              {prod.name}
+                            </span>
+                            {prod.isArchived && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-200 text-neutral-700">
+                                في الأرشيف
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-0.5">
+                            {prod.dimensions && <span>المقاس: {prod.dimensions}</span>}
+                            {prod.dimensions && prod.materials && <span>·</span>}
+                            {prod.materials && <span>الخامة: {prod.materials}</span>}
+                          </div>
                         </td>
 
                         {/* Category */}
@@ -450,24 +573,74 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           {prod.category}
                         </td>
 
-                        {/* Price in DZD */}
-                        <td className="py-3 px-6 font-bold text-[#1E1E1E] tabular-nums">
-                          {formatDZD(prod.price)}
+                        {/* Price with Discounts or "Price on Request" */}
+                        <td className="py-3 px-6 tabular-nums">
+                          {!pricing.hasPrice ? (
+                            <span className="inline-block text-xs font-bold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-lg">
+                              السعر عند الطلب
+                            </span>
+                          ) : pricing.isDiscounted ? (
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-sm text-[#FF551A]">
+                                  {pricing.priceFormatted}
+                                </span>
+                                {pricing.discountBadge && (
+                                  <span className="text-[10px] font-extrabold bg-[#FF551A]/10 text-[#FF551A] px-1.5 py-0.5 rounded">
+                                    {pricing.discountBadge}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-neutral-400 line-through">
+                                {pricing.originalPriceFormatted}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-bold text-sm text-[#1E1E1E]">
+                              {pricing.priceFormatted}
+                            </span>
+                          )}
                         </td>
 
                         {/* Published Toggle */}
                         <td className="py-3 px-6">
                           <button
                             onClick={() => handleTogglePublish(prod)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              prod.isPublished !== false
+                            disabled={prod.isArchived}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                              prod.isPublished !== false && !prod.isArchived
                                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
                                 : 'bg-neutral-100 text-neutral-600 border border-neutral-300 hover:bg-neutral-200'
                             }`}
                             title="انقر لتغيير حالة النشر في المتجر"
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${prod.isPublished !== false ? 'bg-emerald-600' : 'bg-neutral-400'}`} />
-                            <span>{prod.isPublished !== false ? 'معروض' : 'مسودة'}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full ${prod.isPublished !== false && !prod.isArchived ? 'bg-emerald-600' : 'bg-neutral-400'}`} />
+                            <span>{prod.isPublished !== false && !prod.isArchived ? 'معروض' : 'مسودة'}</span>
+                          </button>
+                        </td>
+
+                        {/* Archive Toggle */}
+                        <td className="py-3 px-6">
+                          <button
+                            onClick={() => handleToggleArchive(prod)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                              prod.isArchived
+                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                : 'text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100'
+                            }`}
+                            title={prod.isArchived ? 'استعادة القطعة من الأرشيف' : 'أرشفة القطعة وإخفاؤها من المتجر'}
+                          >
+                            {prod.isArchived ? (
+                              <>
+                                <ArchiveRestore className="w-3.5 h-3.5" />
+                                <span>استعادة</span>
+                              </>
+                            ) : (
+                              <>
+                                <Archive className="w-3.5 h-3.5" />
+                                <span>أرشفة</span>
+                              </>
+                            )}
                           </button>
                         </td>
 
@@ -475,12 +648,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <td className="py-3 px-6">
                           <button
                             onClick={() => handleToggleFeatured(prod)}
-                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                              prod.isFeatured
+                            disabled={prod.isArchived}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                              prod.isFeatured && !prod.isArchived
                                 ? 'text-[#FF551A] bg-orange-50'
                                 : 'text-neutral-300 hover:text-neutral-500'
                             }`}
-                            title="تحديد كمنتج مميز"
+                            title="تحديد كمنتج مميز بالواجهة"
                           >
                             <Sparkles className="w-4 h-4 fill-current" />
                           </button>
@@ -492,7 +666,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <button
                               onClick={() => navigateAdmin(`/admin/products/${prod.id}/edit`)}
                               className="p-2 text-neutral-500 hover:text-[#1E1E1E] hover:bg-neutral-100 rounded-lg transition-colors cursor-pointer"
-                              title="تعديل تفاصيل المنتج والصور"
+                              title="تعديل تفاصيل المنتج والصور والأسعار"
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
@@ -503,7 +677,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 }
                               }}
                               className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="حذف المنتج"
+                              title="حذف المنتج نهائياً"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -523,6 +697,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 onClick={() => {
                   setSearchFilter('');
                   setCategoryFilter('All');
+                  setStatusFilter('all');
                 }}
                 className="text-xs text-[#FF551A] hover:underline font-bold"
               >
@@ -586,71 +761,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-800 flex items-center gap-2">
                   <Cloud className="w-4 h-4 text-emerald-600" />
-                  <span>تخزين صور الأثاث (Vercel Blob)</span>
+                  <span>تخزين صور وفيديوهات الأثاث (Vercel Blob)</span>
                 </span>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                   {blobStatus?.storeName || 'test23-blob'}
                 </span>
               </div>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                يتم رفع صور معارض وكتالوج الأثاث مباشرة إلى Vercel Blob لتوفير استضافة فائقة السرعة وجودة كاملة عبر شبكة CDN العالمية.
+                يتم رفع صور معارض وكتالوج الأثاث ومقاطع الفيديو مباشرة إلى Vercel Blob لتوفير استضافة فائقة السرعة وجودة كاملة عبر شبكة CDN العالمية.
               </p>
 
               <form onSubmit={handleSaveToken} className="space-y-3 pt-1">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-neutral-700 mb-1.5">
-                    مفتاح BLOB_READ_WRITE_TOKEN (اختياري للتجاوز اليدوي)
+                  <label className="block text-xs font-bold text-neutral-700 mb-1">
+                    رمز الوصول السحابي المخصص (BLOB_READ_WRITE_TOKEN)
                   </label>
                   <input
                     type="password"
                     value={tokenInput}
-                    onChange={(e) => {
-                      setTokenInput(e.target.value);
-                      if (tokenError) setTokenError(null);
-                    }}
-                    placeholder="vercel_blob_rw_xxxxxxxxxxxxxxxx"
-                    className="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-[#FF551A]"
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    placeholder="vercel_blob_rw_..."
+                    className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-[#FF551A]"
                   />
                   {tokenError && (
-                    <div className="mt-2 p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
-                      <span>{tokenError}</span>
-                    </div>
+                    <p className="text-[11px] text-red-600 mt-1 font-semibold">{tokenError}</p>
                   )}
                 </div>
-
-                <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (onRefreshDbStatus) await onRefreshDbStatus();
-                      await onRefreshBlobStatus();
+                    onClick={() => {
+                      setTokenInput('');
+                      setCustomBlobToken('');
+                      onRefreshBlobStatus();
                     }}
-                    className="text-xs font-semibold text-neutral-500 hover:text-cyan-700 flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 font-semibold cursor-pointer"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>تحديث الحالة</span>
+                    استعادة الرمز الافتراضي
                   </button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTokenInput('');
-                        setCustomBlobToken('');
-                        onRefreshBlobStatus();
-                        setIsTokenSettingsOpen(false);
-                      }}
-                      className="px-3 py-2 text-xs font-semibold text-neutral-500 hover:text-neutral-800 cursor-pointer"
-                    >
-                      مسح المخصص
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-[#1E1E1E] hover:bg-[#FF551A] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      حفظ وتطبيق
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-[#1E1E1E] hover:bg-[#FF551A] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  >
+                    حفظ واختبار الرمز
+                  </button>
                 </div>
               </form>
             </div>
@@ -662,78 +816,71 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           CHANGE ADMIN PASSWORD MODAL
           ========================================================================= */}
       {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-neutral-200 overflow-hidden">
-            <div className="p-6 bg-[#1E1E1E] text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base">تغيير كلمة مرور الإدارة</h3>
-                  <p className="text-xs text-neutral-400">تحديث كلمة المرور المستخدمة لتسجيل دخول المشرف</p>
-                </div>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-neutral-200 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <h3 className="font-bold text-[#1E1E1E] text-base flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-500" />
+                <span>تغيير كلمة مرور المشرف</span>
+              </h3>
               <button
                 onClick={() => setIsPasswordModalOpen(false)}
-                className="text-neutral-400 hover:text-white p-1 rounded-lg text-lg leading-none cursor-pointer"
+                className="text-neutral-400 hover:text-neutral-700 text-xs font-bold p-1 cursor-pointer"
               >
-                ✕
+                إغلاق
               </button>
             </div>
 
-            <form onSubmit={handleChangePassword} className="p-6 space-y-4">
-              {passwordStatusMsg && (
-                <div
-                  className={`p-3.5 rounded-xl text-xs flex items-start gap-2 ${
-                    passwordStatusMsg.type === 'success'
-                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                      : 'bg-red-50 border border-red-200 text-red-800'
-                  }`}
-                >
-                  {passwordStatusMsg.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                  )}
-                  <span className="leading-relaxed">{passwordStatusMsg.text}</span>
-                </div>
-              )}
+            <p className="text-xs text-neutral-600 leading-relaxed">
+              كلمة المرور الجديدة تُحفظ مشفّرة (Salted Hash) على الخادم لحماية لوحة إدارة أثاث الثقة.
+            </p>
 
+            {passwordStatusMsg && (
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 border ${
+                  passwordStatusMsg.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-red-50 text-red-800 border-red-200'
+                }`}
+              >
+                {passwordStatusMsg.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                )}
+                <span>{passwordStatusMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase text-neutral-700 mb-1.5">
-                  كلمة المرور الجديدة *
+                <label className="block text-xs font-bold text-neutral-700 mb-1.5">
+                  كلمة المرور الجديدة (6 أحرف كحد أدنى)
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   required
                   value={newPasswordInput}
-                  onChange={(e) => {
-                    setNewPasswordInput(e.target.value);
-                    if (passwordStatusMsg) setPasswordStatusMsg(null);
-                  }}
-                  placeholder="أدخل كلمة مرور قوية (6 أحرف على الأقل)..."
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-[#FF551A] text-neutral-900"
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="أدخل كلمة المرور الجديدة..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#FF551A]"
                 />
-                <p className="text-[11px] text-neutral-500 mt-1">
-                  سيتم تطبيق كلمة المرور الجديدة فوراً وحفظها في إعدادات النظام.
-                </p>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-100">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsPasswordModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-bold text-neutral-600 hover:bg-neutral-50 cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={isChangingPassword}
-                  className="px-5 py-2.5 bg-[#1E1E1E] hover:bg-[#FF551A] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-[#1E1E1E] hover:bg-[#FF551A] text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {isChangingPassword ? 'جارٍ الحفظ...' : 'حفظ كلمة المرور'}
+                  {isChangingPassword ? 'جاري التحديث...' : 'تحديث كلمة المرور'}
                 </button>
               </div>
             </form>

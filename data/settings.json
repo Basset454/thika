@@ -1,0 +1,18 @@
+{
+  "heroImageUrl": "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&auto=format&fit=crop&q=85",
+  "heroBadgeText": "أثاث الثقة · فخامة الأثاث المعاصر في الجزائر",
+  "heroTitlePrefix": "فخامة الأثاث العصري..",
+  "heroTitleHighlight": "تدوم لأجيال",
+  "heroDescription": "دار متخصصة في تصميم وتوريد أرقى الصالونات، غرف الطعام، والمساحات المكتبية. نعتمد أخشاب الزان والبلوط الطبيعية وأفخر الأقمشة لتجربة راحة استثنائية.",
+  "heroTypewriterPhrases": [
+    "تفاصيل تصنع الفرق",
+    "مساحات تعكس ذوقك",
+    "راحة تبدأ من اختيارك",
+    "جمال يسكن تفاصيل بيتك"
+  ],
+  "heroCtaPrimaryText": "تصفح الأثاث",
+  "heroCtaPrimaryLink": "#catalog",
+  "heroCtaSecondaryText": "اكتشف فروعنا",
+  "heroCtaSecondaryLink": "#branches",
+  "updatedAt": "2026-10-14T13:29:43.478Z"
+}

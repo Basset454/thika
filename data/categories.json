@@ -1,0 +1,57 @@
+[
+  {
+    "id": "Living Room",
+    "nameAr": "صالونات وغرف معيشة",
+    "nameEn": "Living Room",
+    "order": 1,
+    "isHidden": false,
+    "description": "أرائك عصرية، صالونات زاوية فاخرة، وأطقم جلوس مريحة.",
+    "productCount": 3,
+    "createdAt": "2026-10-14T13:29:28.466Z",
+    "updatedAt": "2026-10-14T13:29:28.466Z"
+  },
+  {
+    "id": "Dining Room",
+    "nameAr": "غرف طعام وطاولات",
+    "nameEn": "Dining Room",
+    "order": 2,
+    "isHidden": false,
+    "description": "طاولات خشب طبيعي مصمت وكراسي سفرة متناسقة وأنيقة.",
+    "productCount": 2,
+    "createdAt": "2026-10-14T13:29:28.563Z",
+    "updatedAt": "2026-10-14T13:29:28.563Z"
+  },
+  {
+    "id": "Bedroom",
+    "nameAr": "غرف نوم وأسرّة",
+    "nameEn": "Bedroom",
+    "order": 3,
+    "isHidden": false,
+    "description": "أسرّة ملكية، طاولات سرير جانبية، وخزائن ملابس راقية.",
+    "productCount": 0,
+    "createdAt": "2026-10-14T13:29:28.646Z",
+    "updatedAt": "2026-10-14T13:29:28.646Z"
+  },
+  {
+    "id": "Office",
+    "nameAr": "مكاتب ومساحات عمل",
+    "nameEn": "Office",
+    "order": 4,
+    "isHidden": false,
+    "description": "مكاتب خشبية مريحة وخزائن ملفات هندسية متطورة.",
+    "productCount": 1,
+    "createdAt": "2026-10-14T13:29:28.729Z",
+    "updatedAt": "2026-10-14T13:29:28.729Z"
+  },
+  {
+    "id": "Lighting",
+    "nameAr": "إضاءة وديكور راقٍ",
+    "nameEn": "Lighting",
+    "order": 5,
+    "isHidden": false,
+    "description": "عناصر إضاءة وديكورات مكملة للأثاث.",
+    "productCount": 0,
+    "createdAt": "2026-10-14T13:29:28.813Z",
+    "updatedAt": "2026-10-14T13:29:28.813Z"
+  }
+]

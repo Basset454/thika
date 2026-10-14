@@ -12,10 +12,15 @@ export const CustomerNavbar: React.FC<CustomerNavbarProps> = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
+      const winScroll = document.documentElement.scrollTop || document.body.scrollTop;
+      const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const scrolled = height > 0 ? (winScroll / height) * 100 : 0;
+      setScrollProgress(Math.min(100, Math.max(0, scrolled)));
+      setIsScrolled(winScroll > 15);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
@@ -48,12 +53,19 @@ export const CustomerNavbar: React.FC<CustomerNavbarProps> = ({
 
   return (
     <header
-      className={`sticky top-0 z-40 transition-all duration-300 ${
+      className={`sticky top-0 z-40 transition-all duration-300 relative ${
         isScrolled
-          ? 'bg-white/95 backdrop-blur-md border-b border-neutral-200/80 shadow-xs py-2'
+          ? 'bg-white/90 backdrop-blur-md border-b border-neutral-200/80 shadow-xs py-2'
           : 'bg-[#FBFBFB] border-b border-neutral-200/50 py-3'
       }`}
     >
+      {/* Scroll Progress Bar at the top (#FF551A) */}
+      <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-neutral-200/30 overflow-hidden z-50 pointer-events-none">
+        <div
+          className="h-full bg-[#FF551A] transition-[width] duration-150 ease-out"
+          style={{ width: `${scrollProgress}%` }}
+        />
+      </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4 h-16 sm:h-18">
           

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, BlobStatus, DatabaseStatus } from './types';
+import { Product, BlobStatus, DatabaseStatus, Category, StoreSettings } from './types';
 import { 
   getProducts, 
   createProduct, 
@@ -9,7 +9,9 @@ import {
   getDatabaseStatus,
   resetProductsToInitial,
   checkAdminStatus,
-  adminLogout
+  adminLogout,
+  getCategories,
+  getStoreSettings
 } from './services/api';
 import { CustomerNavbar } from './components/CustomerNavbar';
 import { CustomerStore } from './components/CustomerStore';
@@ -25,6 +27,8 @@ export default function App() {
   const [checkingAuth, setCheckingAuth] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [storeCategory, setStoreCategory] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [blobStatus, setBlobStatus] = useState<BlobStatus | null>(null);
@@ -87,6 +91,24 @@ export default function App() {
     }
   };
 
+  const refreshCategories = async (forAdmin?: boolean) => {
+    try {
+      const data = await getCategories(forAdmin ?? isAdminRoute);
+      setCategories(data);
+    } catch (err: any) {
+      console.warn('Could not load categories:', err);
+    }
+  };
+
+  const refreshSettings = async () => {
+    try {
+      const data = await getStoreSettings();
+      setSettings(data);
+    } catch (err: any) {
+      console.warn('Could not load store settings:', err);
+    }
+  };
+
   const refreshBlobStatus = async () => {
     try {
       const status = await getBlobStatus();
@@ -108,7 +130,13 @@ export default function App() {
   useEffect(() => {
     async function init() {
       setLoading(true);
-      await Promise.all([refreshProducts(isAdminRoute), refreshBlobStatus(), refreshDbStatus()]);
+      await Promise.all([
+        refreshProducts(isAdminRoute),
+        refreshCategories(isAdminRoute),
+        refreshSettings(),
+        refreshBlobStatus(),
+        refreshDbStatus(),
+      ]);
       setLoading(false);
     }
     init();
@@ -187,6 +215,8 @@ export default function App() {
             ) : (
               <AdminPanel
                 products={products}
+                categories={categories}
+                settings={settings}
                 currentAdminSubpath={adminSubpath}
                 navigateAdmin={navigateAdmin}
                 onAddProduct={handleAddProduct}
@@ -198,6 +228,9 @@ export default function App() {
                 onRefreshBlobStatus={refreshBlobStatus}
                 dbStatus={dbStatus}
                 onRefreshDbStatus={refreshDbStatus}
+                onCategoriesUpdated={setCategories}
+                onSettingsUpdated={setSettings}
+                showToast={showToast}
               />
             )}
           </div>
@@ -223,6 +256,8 @@ export default function App() {
               ) : (
                 <CustomerStore
                   products={products}
+                  categories={categories}
+                  settings={settings}
                   selectedCategory={storeCategory}
                   onCategoryChange={setStoreCategory}
                 />

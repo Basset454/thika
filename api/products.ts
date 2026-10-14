@@ -43,6 +43,16 @@ export interface Product {
   coverImageUrl: string;
   isPublished: boolean;
   isFeatured: boolean;
+  showPrice?: boolean;
+  discountActive?: boolean;
+  discountPrice?: number;
+  discountPercent?: number;
+  discountStartDate?: string;
+  discountEndDate?: string;
+  dimensions?: string;
+  materials?: string;
+  availability?: 'in_stock' | 'pre_order' | 'made_to_order' | 'out_of_stock';
+  isArchived?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -217,6 +227,20 @@ export function normalizeProduct(raw: any): Product {
     coverImageUrl,
     isPublished: raw?.isPublished !== undefined ? Boolean(raw.isPublished) : true,
     isFeatured: Boolean(raw?.isFeatured),
+    showPrice: raw?.showPrice !== undefined ? Boolean(raw.showPrice) : true,
+    discountActive: Boolean(raw?.discountActive),
+    discountPrice: raw?.discountPrice !== null && raw?.discountPrice !== undefined && raw?.discountPrice !== ''
+      ? Number(raw.discountPrice)
+      : undefined,
+    discountPercent: raw?.discountPercent !== null && raw?.discountPercent !== undefined && raw?.discountPercent !== ''
+      ? Number(raw.discountPercent)
+      : undefined,
+    discountStartDate: raw?.discountStartDate ? String(raw.discountStartDate) : undefined,
+    discountEndDate: raw?.discountEndDate ? String(raw.discountEndDate) : undefined,
+    dimensions: raw?.dimensions ? String(raw.dimensions) : undefined,
+    materials: raw?.materials ? String(raw.materials) : undefined,
+    availability: raw?.availability ? (String(raw.availability) as any) : 'in_stock',
+    isArchived: Boolean(raw?.isArchived),
     createdAt: raw?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -267,7 +291,7 @@ export default async function handler(req: any, res: any) {
         getQueryParam('all') === 'true' ||
         getQueryParam('admin') === 'true';
       const isAdmin = wantsAll ? checkAdminAuth(req) : false;
-      const includeUnpublished = wantsAll && isAdmin;
+      const includeUnpublishedAndArchived = wantsAll && isAdmin;
 
       // 1. Primary Source: Neon PostgreSQL
       if (isNeonConfigured()) {
@@ -285,9 +309,9 @@ export default async function handler(req: any, res: any) {
           }
 
           const dbProducts = await getAllProductsFromDb(INITIAL_PRODUCTS);
-          const filtered = includeUnpublished
+          const filtered = includeUnpublishedAndArchived
             ? dbProducts
-            : dbProducts.filter((p) => p.isPublished !== false);
+            : dbProducts.filter((p) => p.isPublished !== false && !p.isArchived);
           const payload = { products: filtered, source: 'neon_postgresql' };
           if (typeof res?.status === 'function') return res.status(200).json(payload);
           return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -298,9 +322,9 @@ export default async function handler(req: any, res: any) {
 
       // 2. Fallback to local storage if Neon unavailable
       const local = loadLocalDiskProducts();
-      const filtered = includeUnpublished
+      const filtered = includeUnpublishedAndArchived
         ? local
-        : local.filter((p) => p.isPublished !== false);
+        : local.filter((p) => p.isPublished !== false && !p.isArchived);
       const payload = { products: filtered, source: 'local_disk' };
       if (typeof res?.status === 'function') return res.status(200).json(payload);
       return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });

@@ -168,3 +168,75 @@ export function formatDZD(amount: number): string {
   return new Intl.NumberFormat('fr-FR').format(amount) + ' د.ج';
 }
 
+/**
+ * Evaluates whether a product's discount is currently active and within valid date bounds.
+ */
+export function isDiscountCurrentlyValid(product: Product): boolean {
+  if (!product.discountActive) return false;
+  if (product.showPrice === false) return false;
+  if (!product.discountPrice || product.discountPrice <= 0) return false;
+  if (product.price && product.discountPrice >= product.price) return false;
+
+  const now = Date.now();
+  if (product.discountStartDate) {
+    const start = new Date(product.discountStartDate).getTime();
+    if (!isNaN(start) && now < start) return false;
+  }
+  if (product.discountEndDate) {
+    const end = new Date(product.discountEndDate).getTime();
+    if (!isNaN(end) && now > end) return false;
+  }
+  return true;
+}
+
+/**
+ * Returns structured pricing presentation for a product, honoring "Price on Request"
+ * and real discounts without ever showing fake zeros or placeholder numbers.
+ */
+export function getProductPricing(product: Product): {
+  hasPrice: boolean;
+  priceFormatted: string;
+  originalPriceFormatted?: string;
+  isDiscounted: boolean;
+  discountPercent?: number;
+  discountBadge?: string;
+} {
+  if (product.showPrice === false) {
+    return {
+      hasPrice: false,
+      priceFormatted: 'السعر عند الطلب',
+      isDiscounted: false,
+    };
+  }
+
+  const basePrice = product.price;
+  if (typeof basePrice !== 'number' || isNaN(basePrice) || basePrice <= 0) {
+    return {
+      hasPrice: false,
+      priceFormatted: 'السعر عند الطلب',
+      isDiscounted: false,
+    };
+  }
+
+  if (isDiscountCurrentlyValid(product) && product.discountPrice) {
+    const calculatedPercent =
+      product.discountPercent ||
+      Math.round(((basePrice - product.discountPrice) / basePrice) * 100);
+
+    return {
+      hasPrice: true,
+      priceFormatted: formatDZD(product.discountPrice),
+      originalPriceFormatted: formatDZD(basePrice),
+      isDiscounted: true,
+      discountPercent: calculatedPercent,
+      discountBadge: `خصم ${calculatedPercent}%`,
+    };
+  }
+
+  return {
+    hasPrice: true,
+    priceFormatted: formatDZD(basePrice),
+    isDiscounted: false,
+  };
+}
+

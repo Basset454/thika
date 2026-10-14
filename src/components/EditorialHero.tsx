@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Product } from '../types';
+import { Product, StoreSettings } from '../types';
 import { ChevronLeft, MapPin, Eye, ArrowDown } from 'lucide-react';
 
 interface EditorialHeroProps {
@@ -8,6 +8,7 @@ interface EditorialHeroProps {
   onScrollToCategories?: () => void;
   featuredProduct?: Product;
   onOpenProductModal?: (product: Product) => void;
+  settings?: StoreSettings | null;
 }
 
 const HERO_SUB_PHRASES = [
@@ -23,6 +24,7 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
   onScrollToCategories,
   featuredProduct,
   onOpenProductModal,
+  settings,
 }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(true);
@@ -133,15 +135,30 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
     return () => clearTimeout(timer);
   }, [charIndex, isDeleting, phraseIndex, isVisible, prefersReducedMotion]);
 
-  const activePhrase = HERO_SUB_PHRASES[phraseIndex];
+  const phrasesList =
+    settings?.heroTypewriterPhrases && settings.heroTypewriterPhrases.length > 0
+      ? settings.heroTypewriterPhrases
+      : HERO_SUB_PHRASES;
+
+  const safePhraseIndex = phraseIndex % phrasesList.length;
+  const activePhrase = phrasesList[safePhraseIndex] || phrasesList[0];
   const displayText = prefersReducedMotion
-    ? HERO_SUB_PHRASES[0]
+    ? phrasesList[0]
     : Array.from(activePhrase).slice(0, charIndex).join('');
 
-  // Use authentic hero imagery: high-definition, warm natural interior showcasing real craftsmanship
+  // Independent Hero Image configured via Store Settings, with high-definition fallback
   const heroImage =
-    featuredProduct?.coverImageUrl ||
+    settings?.heroImageUrl ||
     'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&auto=format&fit=crop&q=85';
+
+  const badgeText = settings?.heroBadgeText || 'أثاث الثقة · فخامة الأثاث المعاصر في الجزائر';
+  const titlePrefix = settings?.heroTitlePrefix || 'فخامة الأثاث العصري..';
+  const titleHighlight = settings?.heroTitleHighlight || 'تدوم لأجيال';
+  const descriptionText =
+    settings?.heroDescription ||
+    'دار متخصصة في تصميم وتوريد أرقى الصالونات، غرف الطعام، والمساحات المكتبية. نعتمد أخشاب الزان والبلوط الطبيعية وأفخر الأقمشة لتجربة راحة استثنائية.';
+  const ctaPrimaryText = settings?.heroCtaPrimaryText || 'تصفح الأثاث';
+  const ctaSecondaryText = settings?.heroCtaSecondaryText || 'اكتشف فروعنا';
 
   return (
     <section
@@ -157,14 +174,14 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
             {/* 1. Subtle Brand Identity Tag */}
             <div className="inline-flex items-center gap-2.5 text-xs font-semibold text-neutral-600">
               <span className="w-2 h-2 rounded-full bg-[#FF551A]" aria-hidden="true" />
-              <span>أثاث الثقة · فخامة الأثاث المعاصر في الجزائر</span>
+              <span>{badgeText}</span>
             </div>
 
-            {/* 2. Fixed Prominent H1 Title with Brand Orange Accent on "تدوم لأجيال" */}
+            {/* 2. Fixed Prominent H1 Title with Brand Orange Accent on Highlight Text */}
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-black text-[#1E1E1E] tracking-tight leading-[1.22]">
-              <span>فخامة الأثاث العصري..</span>{' '}
+              <span>{titlePrefix}</span>{' '}
               <span className="inline sm:block text-[#1E1E1E] mt-1 sm:mt-1.5">
-                بجودة <span className="text-[#FF551A]">تدوم لأجيال</span>
+                بجودة <span className="text-[#FF551A]">{titleHighlight}</span>
               </span>
             </h1>
 
@@ -176,7 +193,7 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
                   className="invisible select-none pointer-events-none opacity-0 col-start-1 row-start-1"
                   aria-hidden="true"
                 >
-                  جمال يسكن تفاصيل بيتك
+                  {phrasesList.reduce((a, b) => (a.length > b.length ? a : b), phrasesList[0])}
                 </span>
 
                 {/* Animated typing phrase with delicate orange cursor */}
@@ -230,7 +247,7 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
 
             {/* Very Short & Focused Paragraph */}
             <p className="text-neutral-600 text-sm sm:text-base lg:text-lg leading-relaxed max-w-xl font-normal">
-              دار متخصصة في تصميم وتوريد أرقى الصالونات، غرف الطعام، والمساحات المكتبية. نعتمد أخشاب الزان والبلوط الطبيعية وأفخر الأقمشة لتجربة راحة استثنائية.
+              {descriptionText}
             </p>
 
             {/* Two Clear Primary & Secondary Action Buttons */}
@@ -240,7 +257,7 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
                 onClick={onExploreCatalog}
                 className="inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3.5 sm:py-4 rounded-xl bg-[#FF551A] hover:bg-[#E04814] text-white text-sm font-bold transition-all shadow-md hover:shadow-lg cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF551A]"
               >
-                <span>تصفح الأثاث</span>
+                <span>{ctaPrimaryText}</span>
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
@@ -250,7 +267,7 @@ export const EditorialHero: React.FC<EditorialHeroProps> = ({
                 className="inline-flex items-center justify-center gap-2 px-6 sm:px-7 py-3.5 sm:py-4 rounded-xl bg-[#1E1E1E] hover:bg-neutral-800 text-white text-sm font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-800"
               >
                 <MapPin className="w-4 h-4 text-[#FF551A]" />
-                <span>اكتشف فروعنا</span>
+                <span>{ctaSecondaryText}</span>
               </button>
             </div>
 

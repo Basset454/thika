@@ -13,6 +13,8 @@ import verifyHandler from './api/admin/verify';
 import logoutHandler from './api/admin/logout';
 import dbStatusHandler from './api/db-status.js';
 import changePasswordHandler from './api/admin/change-password.js';
+import categoriesHandler from './api/categories';
+import settingsHandler from './api/settings';
 
 dotenv.config();
 
@@ -85,6 +87,21 @@ app.all(['/api/products', '/api/products/reset'], (req: Request, res: Response) 
 app.all('/api/products/:id', (req: Request, res: Response) => {
   if (req.params.id !== 'reset') req.query.id = req.params.id;
   return productsHandler(req, res);
+});
+
+// -------------------------------------------------------------
+// 3b. API: Categories & Storefront Settings
+// -------------------------------------------------------------
+app.all('/api/categories', (req: Request, res: Response) => {
+  return categoriesHandler(req, res);
+});
+app.all('/api/categories/:id', (req: Request, res: Response) => {
+  req.query.id = req.params.id;
+  return categoriesHandler(req, res);
+});
+
+app.all('/api/settings', (req: Request, res: Response) => {
+  return settingsHandler(req, res);
 });
 
 // -------------------------------------------------------------

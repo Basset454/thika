@@ -1,4 +1,4 @@
-import { Product, ProductImage, ProductVideo, BlobStatus, DatabaseStatus } from '../types';
+import { Product, ProductImage, ProductVideo, BlobStatus, DatabaseStatus, Category, StoreSettings } from '../types';
 import { upload } from '@vercel/blob/client';
 
 let inMemoryAdminToken: string | null = null;
@@ -223,7 +223,129 @@ export async function resetProductsToInitial(): Promise<Product[]> {
 }
 
 // -------------------------------------------------------------
-// Real Vercel Blob Image Upload (NO FAKE BASE64 FALLBACK)
+// Real Server Categories APIs
+// -------------------------------------------------------------
+export async function getCategories(forAdmin = false): Promise<Category[]> {
+  const sessionToken = getAdminToken();
+  const url = forAdmin ? '/api/categories?admin=true' : '/api/categories';
+  const headers: Record<string, string> = {};
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch(url, { credentials: 'include', headers });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.error || `فشل جلب التصنيفات (${res.status})`);
+  }
+  const data = await res.json();
+  return Array.isArray(data.categories) ? data.categories : [];
+}
+
+export async function createCategory(cat: {
+  id?: string;
+  nameAr: string;
+  nameEn?: string;
+  order?: number;
+  isHidden?: boolean;
+  description?: string;
+}): Promise<Category> {
+  const sessionToken = getAdminToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch('/api/categories', {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(cat),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'فشل إنشاء التصنيف.');
+  }
+  return data.category;
+}
+
+export async function updateCategory(id: string, updates: Partial<Category>): Promise<Category> {
+  const sessionToken = getAdminToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify({ id, ...updates }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'فشل تحديث التصنيف.');
+  }
+  return data.category;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const sessionToken = getAdminToken();
+  const headers: Record<string, string> = {};
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'فشل حذف التصنيف.');
+  }
+}
+
+// -------------------------------------------------------------
+// Real Server Storefront Settings APIs (Header Image, Titles, CTA)
+// -------------------------------------------------------------
+export async function getStoreSettings(): Promise<StoreSettings> {
+  const res = await fetch('/api/settings', { credentials: 'include' });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.error || `فشل جلب إعدادات المتجر (${res.status})`);
+  }
+  const data = await res.json();
+  return data.settings;
+}
+
+export async function updateStoreSettings(settings: Partial<StoreSettings>): Promise<StoreSettings> {
+  const sessionToken = getAdminToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch('/api/settings', {
+    method: 'PUT',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(settings),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'فشل حفظ إعدادات واجهة المتجر.');
+  }
+  return data.settings;
+}
+
+// -------------------------------------------------------------
+// Real Media Storage Upload
 // -------------------------------------------------------------
 export async function uploadImageFiles(
   files: File[],

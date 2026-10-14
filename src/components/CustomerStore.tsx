@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product } from '../types';
-import { ARABIC_CATEGORIES, formatDZD } from '../data/initialProducts';
+import { Product, Category, StoreSettings } from '../types';
+import { ARABIC_CATEGORIES, formatDZD, getProductPricing } from '../data/initialProducts';
 import { EditorialHero } from './EditorialHero';
+import { ProductCard } from './ProductCard';
 import { BranchLocationsSection } from './BranchLocationsSection';
 import { ArchitecturalMaterialsSection } from './ArchitecturalMaterialsSection';
 import { useScrollReveal } from '../hooks/useScrollReveal';
@@ -33,12 +34,16 @@ interface CustomerStoreProps {
   products: Product[];
   selectedCategory?: string;
   onCategoryChange?: (category: string) => void;
+  settings?: StoreSettings | null;
+  categories?: Category[];
 }
 
 export const CustomerStore: React.FC<CustomerStoreProps> = ({
   products,
   selectedCategory: externalCategory,
   onCategoryChange,
+  settings,
+  categories: dynamicCategories,
 }) => {
   const [internalCategory, setInternalCategory] = useState<string>('All');
   const selectedCategory = externalCategory !== undefined ? externalCategory : internalCategory;
@@ -56,9 +61,9 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
 
-  // Filter only published products for public storefront
+  // Filter only published products for public storefront (exclude archived products)
   const publishedProducts = useMemo(() => {
-    return products.filter((p) => p.isPublished !== false);
+    return products.filter((p) => p.isPublished !== false && !p.isArchived);
   }, [products]);
 
   // Featured Products (3 to 4 curated pieces)
@@ -196,6 +201,15 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
   };
 
   const getCategoryArabicName = (catName: string) => {
+    if (dynamicCategories && dynamicCategories.length > 0) {
+      const match = dynamicCategories.find(
+        (c) =>
+          c.id.toLowerCase() === catName.toLowerCase() ||
+          c.nameEn.toLowerCase() === catName.toLowerCase() ||
+          c.nameAr === catName
+      );
+      if (match) return match.nameAr;
+    }
     const found = ARABIC_CATEGORIES.find(
       (c) =>
         c.id.toLowerCase() === catName.toLowerCase() ||
@@ -205,41 +219,81 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
     return found ? found.nameAr : catName;
   };
 
-  // Visual Category definitions with authentic imagery
-  const visualCategories = [
-    {
-      id: 'Living Room',
-      nameAr: 'الصالونات والمعيشة',
-      subtitle: 'أطقم صالونات وأرائك وثير بتنجيد فاخر',
-      image:
-        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('living'))?.coverImageUrl ||
-        'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&auto=format&fit=crop&q=80',
-    },
-    {
-      id: 'Dining Room',
-      nameAr: 'غرف الطعام والطاولات',
-      subtitle: 'طاولات خشب زان وبلوط صلب مع كراسي مكسوة',
-      image:
-        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('dining'))?.coverImageUrl ||
-        'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=900&auto=format&fit=crop&q=80',
-    },
-    {
-      id: 'Bedroom',
-      nameAr: 'غرف النوم والأسرّة',
-      subtitle: 'أسرّة منجدة وخزائن مدمجة بلمسات هادئة',
-      image:
-        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('bed'))?.coverImageUrl ||
-        'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=900&auto=format&fit=crop&q=80',
-    },
-    {
-      id: 'Office',
-      nameAr: 'المكاتب والديكور',
-      subtitle: 'مساحات عمل مريحة وإكسسوارات ديكور راقية',
-      image:
-        publishedProducts.find((p) => (p.category || '').toLowerCase().includes('office'))?.coverImageUrl ||
-        'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=900&auto=format&fit=crop&q=80',
-    },
-  ];
+  // Visual Category definitions with authentic imagery (Dynamic from Neon DB categories)
+  const visualCategories = useMemo(() => {
+    if (dynamicCategories && dynamicCategories.length > 0) {
+      const visible = dynamicCategories
+        .filter((c) => !c.isHidden)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      if (visible.length > 0) {
+        return visible.map((cat) => {
+          const matchingProduct = publishedProducts.find(
+            (p) =>
+              (p.category && p.category.toLowerCase() === cat.id.toLowerCase()) ||
+              p.category === cat.nameAr ||
+              (cat.nameEn && p.category.toLowerCase() === cat.nameEn.toLowerCase())
+          );
+          return {
+            id: cat.id,
+            nameAr: cat.nameAr,
+            subtitle: cat.description || `تشكيلة ${cat.nameAr} الحصرية والمصنوعة بعناية`,
+            image:
+              matchingProduct?.coverImageUrl ||
+              'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&auto=format&fit=crop&q=80',
+          };
+        });
+      }
+    }
+
+    return [
+      {
+        id: 'Living Room',
+        nameAr: 'الصالونات والمعيشة',
+        subtitle: 'أطقم صالونات وأرائك وثير بتنجيد فاخر',
+        image:
+          publishedProducts.find((p) => (p.category || '').toLowerCase().includes('living'))?.coverImageUrl ||
+          'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&auto=format&fit=crop&q=80',
+      },
+      {
+        id: 'Dining Room',
+        nameAr: 'غرف الطعام والطاولات',
+        subtitle: 'طاولات خشب زان وبلوط صلب مع كراسي مكسوة',
+        image:
+          publishedProducts.find((p) => (p.category || '').toLowerCase().includes('dining'))?.coverImageUrl ||
+          'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?w=900&auto=format&fit=crop&q=80',
+      },
+      {
+        id: 'Bedroom',
+        nameAr: 'غرف النوم والأسرّة',
+        subtitle: 'أسرّة منجدة وخزائن مدمجة بلمسات هادئة',
+        image:
+          publishedProducts.find((p) => (p.category || '').toLowerCase().includes('bed'))?.coverImageUrl ||
+          'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=900&auto=format&fit=crop&q=80',
+      },
+      {
+        id: 'Office',
+        nameAr: 'المكاتب والديكور',
+        subtitle: 'مساحات عمل مريحة وإكسسوارات ديكور راقية',
+        image:
+          publishedProducts.find((p) => (p.category || '').toLowerCase().includes('office'))?.coverImageUrl ||
+          'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=900&auto=format&fit=crop&q=80',
+      },
+    ];
+  }, [dynamicCategories, publishedProducts]);
+
+  const catalogCategoryTabs = useMemo(() => {
+    if (dynamicCategories && dynamicCategories.length > 0) {
+      const visible = dynamicCategories
+        .filter((c) => !c.isHidden)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      return [
+        { id: 'All', nameAr: 'الكل' },
+        ...visible.map((c) => ({ id: c.id, nameAr: c.nameAr })),
+      ];
+    }
+    return ARABIC_CATEGORIES.map((c) => ({ id: c.id, nameAr: c.nameAr }));
+  }, [dynamicCategories]);
 
   const storeContainerRef = useScrollReveal([filteredProducts, selectedCategory, searchQuery, sortBy]);
 
@@ -255,6 +309,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
         onScrollToCategories={() => scrollToAnchor('categories')}
         featuredProduct={featuredProducts[0]}
         onOpenProductModal={openProductModal}
+        settings={settings}
       />
 
       {/* Main Content Container */}
@@ -346,94 +401,16 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredProducts.map((product, index) => {
-                const coverImage = product.images.find((img) => img.isCover) || product.images[0];
-                const secondaryImage =
-                  product.images.length > 1
-                    ? product.images.find((img) => !img.isCover) || product.images[1]
-                    : null;
-                const categoryAr = getCategoryArabicName(product.category);
-
-                return (
-                  <article
-                    key={product.id}
-                    onClick={() => openProductModal(product)}
-                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between reveal-card"
-                    style={{ transitionDelay: `${index * 85}ms` }}
-                  >
-                    {/* Consistent 4:3 Product Image with Internal Zoom */}
-                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
-                      <img
-                        src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
-                        alt={product.name}
-                        referrerPolicy="no-referrer"
-                        className={`w-full h-full object-cover transition-all duration-500 ease-out ${
-                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-105'
-                        }`}
-                        loading="lazy"
-                      />
-                      {secondaryImage && (
-                        <img
-                          src={secondaryImage.url}
-                          alt={`${product.name} - زاوية أخرى`}
-                          referrerPolicy="no-referrer"
-                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      )}
-                      
-                      {/* Quiet Category label */}
-                      <span className="absolute top-3 right-3 bg-white/90 backdrop-blur-xs text-[#1E1E1E] text-[11px] font-bold px-2.5 py-1 rounded-lg border border-neutral-200/70 shadow-2xs">
-                        {categoryAr}
-                      </span>
-
-                      {/* Image count */}
-                      {product.images.length > 1 && (
-                        <span className="absolute bottom-3 right-3 bg-[#1E1E1E]/80 backdrop-blur-xs text-white text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Layers className="w-3 h-3 text-neutral-300" />
-                          <span className="tabular-nums">{product.images.length}</span>
-                        </span>
-                      )}
-
-                      {/* Video Badge */}
-                      {product.videos && product.videos.length > 0 && (
-                        <span className="absolute bottom-3 left-3 bg-[#1E1E1E]/85 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs border border-white/10">
-                          <Play className="w-2.5 h-2.5 fill-[#FF551A] text-[#FF551A]" />
-                          <span>فيديو</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Card Content (Fixed and Stable) */}
-                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                      <div>
-                        <h3 className="text-base font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors truncate">
-                          {product.name}
-                        </h3>
-                        <p className="text-xs text-neutral-500 line-clamp-2 mt-1.5 leading-relaxed min-h-[2rem]">
-                          {product.description || 'قطعة أثاث عصرية مصنوعة بعناية فائقة وتصميم متناسق.'}
-                        </p>
-                      </div>
-
-                      <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] text-neutral-400 block font-medium">السعر</span>
-                          <span className="text-base sm:text-lg font-bold text-[#1E1E1E] tabular-nums">
-                            {formatDZD(product.price)}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded-lg bg-neutral-100 group-hover:bg-[#FF551A] text-neutral-700 group-hover:text-white text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>التفاصيل</span>
-                          <ChevronLeft className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+              {featuredProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onOpenModal={openProductModal}
+                  categoryArabicName={getCategoryArabicName(product.category)}
+                  delayMs={index * 85}
+                  featuredVariant={true}
+                />
+              ))}
             </div>
           </section>
         )}
@@ -502,7 +479,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
 
             {/* Category Filter Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-              {ARABIC_CATEGORIES.map((cat) => {
+              {catalogCategoryTabs.map((cat) => {
                 const isActive = selectedCategory === cat.id;
                 return (
                   <button
@@ -543,100 +520,15 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
           {/* Product Grid */}
           {filteredProducts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {filteredProducts.map((product, index) => {
-                const coverImage = product.images.find((img) => img.isCover) || product.images[0];
-                const secondaryImage =
-                  product.images.length > 1
-                    ? product.images.find((img) => !img.isCover) || product.images[1]
-                    : null;
-                const categoryAr = getCategoryArabicName(product.category);
-
-                return (
-                  <article
-                    key={product.id}
-                    onClick={() => openProductModal(product)}
-                    className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-lg hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between reveal-card"
-                    style={{ transitionDelay: `${(index % 6) * 75}ms` }}
-                  >
-                    {/* Consistent 4:3 Image with Internal Zoom */}
-                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
-                      <img
-                        src={coverImage?.url || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800'}
-                        alt={product.name}
-                        referrerPolicy="no-referrer"
-                        className={`w-full h-full object-cover transition-all duration-500 ease-out ${
-                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-105'
-                        }`}
-                        loading="lazy"
-                      />
-                      {secondaryImage && (
-                        <img
-                          src={secondaryImage.url}
-                          alt={`${product.name} - صورة ثانوية`}
-                          referrerPolicy="no-referrer"
-                          className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-100 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      )}
-
-                      {/* Quiet Category Tag */}
-                      <span className="absolute top-3 right-3 bg-white/92 backdrop-blur-xs text-[#1E1E1E] text-[11px] font-bold px-2.5 py-1 rounded-lg border border-neutral-200/70 shadow-2xs">
-                        {categoryAr}
-                      </span>
-
-                      {/* Image count */}
-                      {product.images.length > 1 && (
-                        <span className="absolute bottom-3 right-3 bg-[#1E1E1E]/80 backdrop-blur-xs text-white text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Layers className="w-3 h-3 text-neutral-300" />
-                          <span className="tabular-nums">{product.images.length} صور</span>
-                        </span>
-                      )}
-
-                      {/* Video Badge */}
-                      {product.videos && product.videos.length > 0 && (
-                        <span className="absolute bottom-3 left-3 bg-[#1E1E1E]/85 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs border border-white/10">
-                          <Play className="w-2.5 h-2.5 fill-[#FF551A] text-[#FF551A]" />
-                          <span>فيديو</span>
-                        </span>
-                      )}
-
-                      {/* Hover Overlay */}
-                      <div className="absolute inset-0 bg-[#1E1E1E]/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <span className="bg-white/95 text-[#1E1E1E] text-xs font-bold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-1.5">
-                          <Eye className="w-4 h-4 text-[#FF551A]" />
-                          <span>معاينة التفاصيل</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Card Content (Stable Dimensions) */}
-                    <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
-                      <div>
-                        <h3 className="text-base sm:text-lg font-bold text-[#1E1E1E] group-hover:text-[#FF551A] transition-colors truncate">
-                          {product.name}
-                        </h3>
-                        <p className="text-xs text-neutral-500 line-clamp-2 mt-2 leading-relaxed min-h-[2.2rem]">
-                          {product.description || 'قطعة أثاث عصرية مصنوعة بعناية فائقة وتصميم متناسق يلائم أرقى الديكورات.'}
-                        </p>
-                      </div>
-
-                      {/* Price & Action */}
-                      <div className="pt-4 border-t border-neutral-100 flex items-center justify-between gap-3">
-                        <div>
-                          <span className="text-[10px] text-neutral-400 block font-medium">السعر الرسمي</span>
-                          <span className="text-lg font-bold text-[#1E1E1E] tabular-nums">
-                            {formatDZD(product.price)}
-                          </span>
-                        </div>
-                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-100 group-hover:bg-[#FF551A] text-neutral-700 group-hover:text-white text-xs font-bold transition-colors">
-                          <span>عرض التفاصيل</span>
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+              {filteredProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onOpenModal={openProductModal}
+                  categoryArabicName={getCategoryArabicName(product.category)}
+                  delayMs={(index % 6) * 75}
+                />
+              ))}
             </div>
           ) : (
             <div className="text-center py-16 bg-white rounded-2xl border border-neutral-200 p-8 space-y-4">
@@ -851,12 +743,79 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                     {activeProduct.name}
                   </h2>
 
-                  <div className="mt-4 pt-4 border-t border-neutral-100">
-                    <span className="text-xs text-neutral-400 block">السعر الرسمي</span>
-                    <div className="text-2xl sm:text-3xl font-bold text-[#1E1E1E] tabular-nums">
-                      {formatDZD(activeProduct.price)}
+                  {(() => {
+                    const activePricing = getProductPricing(activeProduct);
+                    if (!activePricing.hasPrice) {
+                      return (
+                        <div className="mt-4 pt-4 border-t border-neutral-100">
+                          <span className="text-xs text-neutral-400 block font-medium">السعر</span>
+                          <div className="text-2xl sm:text-3xl font-bold text-neutral-800">
+                            السعر عند الطلب
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (activePricing.isDiscounted) {
+                      return (
+                        <div className="mt-4 pt-4 border-t border-neutral-100">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs text-neutral-400 font-medium">السعر بعد التخفيض</span>
+                            <span className="bg-[#FF551A] text-white text-xs font-extrabold px-2 py-0.5 rounded-md shadow-xs">
+                              {activePricing.discountBadge}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-3">
+                            <div className="text-2xl sm:text-3xl font-bold text-[#FF551A] tabular-nums">
+                              {activePricing.priceFormatted}
+                            </div>
+                            <div className="text-base text-neutral-400 line-through tabular-nums">
+                              {activePricing.originalPriceFormatted}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="mt-4 pt-4 border-t border-neutral-100">
+                        <span className="text-xs text-neutral-400 block font-medium">السعر الرسمي</span>
+                        <div className="text-2xl sm:text-3xl font-bold text-[#1E1E1E] tabular-nums">
+                          {activePricing.priceFormatted}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Dimensions, Materials & Availability Details */}
+                  {(activeProduct.dimensions || activeProduct.materials || activeProduct.availability) && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-neutral-50 p-4 rounded-xl border border-neutral-200">
+                      {activeProduct.dimensions && (
+                        <div>
+                          <span className="text-neutral-400 block text-[10px]">المقاسات والأبعاد</span>
+                          <strong className="text-neutral-800 font-bold">{activeProduct.dimensions}</strong>
+                        </div>
+                      )}
+                      {activeProduct.materials && (
+                        <div>
+                          <span className="text-neutral-400 block text-[10px]">الخامات والمواد</span>
+                          <strong className="text-neutral-800 font-bold">{activeProduct.materials}</strong>
+                        </div>
+                      )}
+                      {activeProduct.availability && (
+                        <div className="sm:col-span-2">
+                          <span className="text-neutral-400 block text-[10px]">حالة التوفر في المعرض</span>
+                          <strong className="text-[#FF551A] font-bold">
+                            {activeProduct.availability === 'out_of_stock'
+                              ? 'غير متوفر حالياً'
+                              : activeProduct.availability === 'pre_order'
+                              ? 'متاح للطلب المسبق (الحجز قبل التوريد)'
+                              : activeProduct.availability === 'made_to_order'
+                              ? 'تصنيع وتفصيل حسب رغبة الزبون'
+                              : 'متوفر وجاهز للتسليم الفوري'}
+                          </strong>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
 
                   <div className="mt-6 space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700">
@@ -882,7 +841,11 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                 <div className="space-y-3 pt-4 border-t border-neutral-200">
                   <a
                     href={`https://wa.me/?text=${encodeURIComponent(
-                      `السلام عليكم، أود الاستفسار عن توفر قطعة الأثاث: ${activeProduct.name} (السعر: ${formatDZD(activeProduct.price)}) المعروضة في متجر أثاث الثقة.`
+                      `السلام عليكم، أود الاستفسار عن توفر قطعة الأثاث: ${activeProduct.name} (${
+                        getProductPricing(activeProduct).hasPrice
+                          ? `السعر: ${getProductPricing(activeProduct).priceFormatted}`
+                          : 'السعر عند الطلب'
+                      }) المعروضة في متجر أثاث الثقة.`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
