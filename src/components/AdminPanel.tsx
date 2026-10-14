@@ -33,6 +33,7 @@ import { AdminProductForm } from './AdminProductForm';
 import { AdminCategoriesManager } from './AdminCategoriesManager';
 import { AdminStorefrontSettings } from './AdminStorefrontSettings';
 import { AdminTrustStandardsManager } from './AdminTrustStandardsManager';
+import { LogoMark } from './LogoMark';
 import { getCustomBlobToken, setCustomBlobToken, changeAdminPassword } from '../services/api';
 import { formatDZD, ARABIC_CATEGORIES, getProductPricing } from '../data/initialProducts';
 
@@ -227,12 +228,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span>تخزين الصور Vercel Blob</span>
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">
-              إدارة متجر أثاث الثقة
-            </h1>
-            <p className="text-xs text-neutral-400">
-              تحكم متكامل في المنتجات، التصنيفات، الأسعار والتخفيضات، وصورة الواجهة الرئيسية
-            </p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-neutral-800 p-1.5 border border-neutral-700 shadow-inner flex items-center justify-center overflow-hidden">
+                <LogoMark className="w-full h-full" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">
+                  إدارة متجر أثاث الثقة
+                </h1>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  تحكم متكامل في المنتجات، التصنيفات، الأسعار والتخفيضات، وصورة الواجهة الرئيسية
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Quick Header Actions */}
