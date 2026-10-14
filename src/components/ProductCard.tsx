@@ -34,6 +34,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const activeIndex = hoverPreviewIndex !== null ? hoverPreviewIndex : selectedPhotoIndex;
   const currentImage = imagesList[activeIndex] || imagesList[0];
 
+  // Robust image URL resolution (supports uploaded coverImageUrl, images list, or fallback)
+  const displayImageUrl = useMemo(() => {
+    if (currentImage?.url && currentImage.url.trim().length > 0) {
+      return currentImage.url.trim();
+    }
+    if (product.coverImageUrl && product.coverImageUrl.trim().length > 0) {
+      return product.coverImageUrl.trim();
+    }
+    if (imagesList[0]?.url && imagesList[0].url.trim().length > 0) {
+      return imagesList[0].url.trim();
+    }
+    return undefined;
+  }, [currentImage, product.coverImageUrl, imagesList]);
+
   const pricing = useMemo(() => getProductPricing(product), [product]);
 
   return (
@@ -45,7 +59,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       {/* Product Image Area with Stable Display & Thumbnail Selectors */}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F6F5F2] border-b border-neutral-100">
         <OptimizedImage
-          src={currentImage?.url}
+          src={displayImageUrl}
           alt={product.name}
           targetWidth={600}
           widthsForSrcSet={[320, 480, 640, 800]}

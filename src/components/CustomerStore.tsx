@@ -354,7 +354,7 @@ export const CustomerStore: React.FC<CustomerStoreProps> = ({
                 className="group cursor-pointer bg-white rounded-2xl border border-neutral-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-neutral-300 transition-all duration-300 flex flex-col justify-between reveal-card"
                 style={{ transitionDelay: `${index * 85}ms` }}
               >
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100 reveal-image-curtain">
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100">
                   <OptimizedImage
                     src={cat.image}
                     fallbackSrc={getDefaultCategoryImage(cat.id)}

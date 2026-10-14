@@ -13,44 +13,62 @@ export function useScrollReveal(dependencies: any[] = []) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Check for reduced motion preference
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
     const root = containerRef.current || document;
-    const elements = root.querySelectorAll(
-      '.reveal-fade-up, .reveal-fade-side, .reveal-image-curtain, .reveal-card, .reveal-scale-in'
-    );
 
-    if (prefersReducedMotion || typeof IntersectionObserver === 'undefined') {
-      elements.forEach((el) => {
-        el.classList.add('is-revealed');
+    const applyReveals = () => {
+      const elements = root.querySelectorAll<HTMLElement>(
+        '.reveal-fade-up, .reveal-fade-side, .reveal-image-curtain, .reveal-card, .reveal-scale-in'
+      );
+
+      elements.forEach((el: HTMLElement) => {
+        // If element was previously revealed or marked in dataset, preserve is-revealed class across React re-renders
+        if (el.dataset.revealed === 'true') {
+          el.classList.add('is-revealed');
+          return;
+        }
+
+        if (prefersReducedMotion || typeof IntersectionObserver === 'undefined') {
+          el.dataset.revealed = 'true';
+          el.classList.add('is-revealed');
+          return;
+        }
+
+        // Reveal immediately if element is in or near viewport on mount/update
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 150 && rect.bottom > -150) {
+          el.dataset.revealed = 'true';
+          el.classList.add('is-revealed');
+        }
       });
-      return;
-    }
+
+      return elements;
+    };
+
+    const elements = applyReveals();
+
+    if (prefersReducedMotion || typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver(
       (entries, obs) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-revealed');
-            // Unobserve so animation runs only once
-            obs.unobserve(entry.target);
+          const target = entry.target as HTMLElement;
+          if (entry.isIntersecting || target.dataset.revealed === 'true') {
+            target.dataset.revealed = 'true';
+            target.classList.add('is-revealed');
+            obs.unobserve(target);
           }
         });
       },
       {
         root: null,
-        rootMargin: '0px 0px -60px 0px', // trigger slightly before it hits mid-screen
-        threshold: 0.1,
+        rootMargin: '100px 0px 100px 0px',
+        threshold: 0.01,
       }
     );
 
-    elements.forEach((el) => {
-      // If element is already in viewport on load, reveal immediately
-      const rect = el.getBoundingClientRect();
-      if (rect.top < window.innerHeight - 50 && rect.bottom > 0) {
-        el.classList.add('is-revealed');
-      } else {
+    elements.forEach((el: HTMLElement) => {
+      if (el.dataset.revealed !== 'true') {
         observer.observe(el);
       }
     });

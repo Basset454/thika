@@ -58,6 +58,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   const [currentSrc, setCurrentSrc] = useState<string>(initialSrc);
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const imgRef = React.useRef<HTMLImageElement>(null);
 
   // Sync state when props change
   useEffect(() => {
@@ -65,6 +66,13 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
     setHasError(false);
     setCurrentSrc(initialSrc);
   }, [initialSrc]);
+
+  // Check if image is already completed in browser cache on mount or src update
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    }
+  }, [currentSrc]);
 
   const computedSrcSet = generateSrcSet(currentSrc, widthsForSrcSet, quality);
 
@@ -78,6 +86,8 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
       setHasError(true);
       setCurrentSrc(fallbackSrc);
       if (onError) onError(e);
+    } else {
+      setIsLoaded(true);
     }
   };
 
@@ -93,6 +103,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
       )}
 
       <img
+        ref={imgRef}
         src={effectiveSrc}
         srcSet={computedSrcSet}
         sizes={sizes}
