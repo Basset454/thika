@@ -710,7 +710,7 @@ export const AdminImageUploader: React.FC<AdminImageUploaderProps> = ({
                   {/* HTML5 Video Preview Player */}
                   <div className="rounded-xl overflow-hidden bg-black aspect-video relative flex items-center justify-center">
                     <video
-                      src={vid.url}
+                      src={vid.url || undefined}
                       controls
                       playsInline
                       preload="metadata"

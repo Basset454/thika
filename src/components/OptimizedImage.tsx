@@ -44,29 +44,27 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
   style,
   ...restProps
 }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-  const [currentSrc, setCurrentSrc] = useState<string>('');
-
-  // Calculate optimized URL and responsive srcset
-  useEffect(() => {
-    setIsLoaded(false);
-    setHasError(false);
-
-    if (!src) {
-      setCurrentSrc(fallbackSrc);
-      return;
-    }
-
-    const optOptions: OptimizeImageOptions = {
+  // Synchronously compute initial src to avoid initial empty string render
+  const initialSrc = React.useMemo(() => {
+    if (!src) return fallbackSrc;
+    return getOptimizedImageUrl(src, {
       width: targetWidth,
       quality,
       format: 'webp',
       fit: 'crop',
-    };
-
-    setCurrentSrc(getOptimizedImageUrl(src, optOptions));
+    });
   }, [src, targetWidth, quality, fallbackSrc]);
+
+  const [currentSrc, setCurrentSrc] = useState<string>(initialSrc);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Sync state when props change
+  useEffect(() => {
+    setIsLoaded(false);
+    setHasError(false);
+    setCurrentSrc(initialSrc);
+  }, [initialSrc]);
 
   const computedSrcSet = generateSrcSet(currentSrc, widthsForSrcSet, quality);
 
@@ -83,6 +81,8 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
     }
   };
 
+  const effectiveSrc = currentSrc || fallbackSrc || undefined;
+
   return (
     <div
       className={`relative overflow-hidden bg-neutral-100 ${aspectRatio || ''} ${containerClassName}`}
@@ -93,13 +93,12 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
       )}
 
       <img
-        src={currentSrc}
+        src={effectiveSrc}
         srcSet={computedSrcSet}
         sizes={sizes}
         alt={alt}
         loading={loading}
-        // @ts-expect-error fetchpriority attribute standard
-        fetchpriority={fetchPriority}
+        fetchPriority={fetchPriority}
         referrerPolicy={referrerPolicy}
         onLoad={handleImageLoad}
         onError={handleImageError}

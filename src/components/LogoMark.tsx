@@ -18,8 +18,7 @@ export const LogoMark: React.FC<LogoMarkProps> = ({ className = "w-10 h-10", siz
         width={size || 40}
         height={size || 40}
         loading="eager"
-        // @ts-expect-error fetchpriority standard attribute
-        fetchpriority="high"
+        fetchPriority="high"
         onError={(e) => {
           // Fallback if image not found
           (e.currentTarget as HTMLElement).style.display = 'none';
